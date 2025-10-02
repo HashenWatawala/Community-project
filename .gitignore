@@ -1,0 +1,60 @@
+# --------------------
+# Python / FastAPI
+# --------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+
+# Virtual env
+venv/
+env/
+
+# Python build
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Alembic migrations cache
+alembic/versions/*.pyc
+
+# --------------------
+# Node / React (Vite)
+# --------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite / React build
+dist/
+build/
+.cache/
+out/
+
+# --------------------
+# Environment variables
+# --------------------
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# --------------------
+# OS / Editor files
+# --------------------
+*.swp
+*.swo
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
