@@ -1,34 +1,66 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from "react"
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
+import GetStarted from "./pages/GetStarted";
+import GenerateTimetable from "./pages/Timetable/GenerateTimetable";
+import ViewTimetable from "./pages/Timetable/ViewTimetable";
+import LoginPage from "./pages/Auth/LoginPage";
+import Dashboard from "./pages/Dashboard/DashBoard";
+import ClassManagement from "./pages/Management/ClassManagement";
+import RegisterPage  from "./pages/Auth/RegisterPage";
+import TeacherManagement from "./pages/Management/TeacherManagement";
+import SubjectManagement from "./pages/Management/SubjectManagement";
+
+
+import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
-  const [count, setCount] = useState(0)
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <Router>
+      <Routes>
+        <Route path="/" element={<GetStarted />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/class-management" element={
+          <ProtectedRoute>
+            <ClassManagement />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/teacher-management" element={
+          <ProtectedRoute>
+            <TeacherManagement />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/subject-management" element={
+          <ProtectedRoute>
+            <SubjectManagement />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/generate-timetable" element={
+          <ProtectedRoute>
+            <GenerateTimetable />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/view-timetable" element={
+          <ProtectedRoute>
+            <ViewTimetable />
+          </ProtectedRoute>
+        } />
+
+      </Routes>
+    </Router>
   )
 }
 
