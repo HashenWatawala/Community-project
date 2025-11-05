@@ -9,7 +9,7 @@ const Sidebar = () => {
     { name: "Subject Management", path: "/subject-management" },
     { name: "Class Management", path: "/class-management" },
     { name: "Generate Timetable", path: "/generate-timetable" },
-    { name: "View Timetables", path: "/view-timetables" },
+    { name: "View Timetable", path: "/view-timetable" },
   ];
 
   return (
