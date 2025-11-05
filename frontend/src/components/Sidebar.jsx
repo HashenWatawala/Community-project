@@ -13,7 +13,8 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="w-[380px] h-[1130px] bg-[#0b2948] text-white flex flex-col px-6 py-10">
+    // Responsive width, full viewport height, stays pinned and scrolls its own content
+    <div className="w-64 md:w-72 lg:w-80 h-screen sticky top-0 bg-[#0b2948] text-white flex flex-col px-6 py-10 flex-shrink-0 overflow-y-auto">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-16">
         <FaClipboardList size={36} />

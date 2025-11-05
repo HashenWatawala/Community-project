@@ -10,7 +10,6 @@ import ClassManagement from "./pages/Management/ClassManagement";
 import RegisterPage from "./pages/Auth/RegisterPage";
 import TeacherManagement from "./pages/Management/TeacherManagement";
 import SubjectManagement from "./pages/Management/SubjectManagement";
-import Sidebar from "./components/Sidebar";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
 
@@ -21,8 +20,6 @@ function App() {
         <Route path="/" element={<GetStarted />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/Sidebar" element={<Sidebar />} />
-
 
         <Route
           path="/dashboard"
@@ -51,14 +48,7 @@ function App() {
           }
         />
 
-        <Route
-          path="/subject-management"
-          element={
-            <ProtectedRoute>
-              <SubjectManagement />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/subject-management" element={<SubjectManagement />} />
 
         <Route
           path="/generate-timetable"

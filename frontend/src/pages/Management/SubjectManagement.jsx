@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
-import { Search, X, Plus, Edit2, Trash2 } from 'lucide-react';
-import Button from '../../components/Button.jsx';
-import Sidebar from '../../components/Sidebar.jsx';'../../components/Sidebar.jsx';
-import Navbar from '../../components/Navbar.jsx';'../../components/Navbar.jsx';
-
-
+import React, { useState } from "react";
+import { Search, X, Plus, Edit2, Trash2 } from "lucide-react";
+import Button from "../../components/Button.jsx";
+import Sidebar from "../../components/Sidebar.jsx";
+import Navbar from "../../components/Navbar.jsx";
 
 // OVERLAY MODAL COMPONENT
 const Modal = ({ isOpen, onClose, children }) => {
@@ -12,7 +10,10 @@ const Modal = ({ isOpen, onClose, children }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose}></div>
+      <div
+        className="absolute inset-0 bg-black bg-opacity-50"
+        onClick={onClose}
+      ></div>
       <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {children}
       </div>
@@ -20,17 +21,20 @@ const Modal = ({ isOpen, onClose, children }) => {
   );
 };
 
-
 // ADD/EDIT SUBJECT FORM COMPONENT
 const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
   const [formData, setFormData] = useState({
-    subjectName: editData?.subjectName || '',
-    periodsPerWeek: editData?.periodsPerWeek || '',
-    assignedTeacher: editData?.assignedTeacher || ''
+    subjectName: editData?.subjectName || "",
+    periodsPerWeek: editData?.periodsPerWeek || "",
+    assignedTeacher: editData?.assignedTeacher || "",
   });
 
   const handleSubmit = () => {
-    if (formData.subjectName && formData.periodsPerWeek && formData.assignedTeacher) {
+    if (
+      formData.subjectName &&
+      formData.periodsPerWeek &&
+      formData.assignedTeacher
+    ) {
       onSave({ ...formData, grade });
       onClose();
     }
@@ -40,7 +44,7 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">
-          {editData ? 'Edit Subject' : 'Add New Subject'}
+          {editData ? "Edit Subject" : "Add New Subject"}
         </h2>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
           <X size={24} />
@@ -54,7 +58,9 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
               type="text"
               placeholder="Subject Name"
               value={formData.subjectName}
-              onChange={(e) => setFormData({ ...formData, subjectName: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, subjectName: e.target.value })
+              }
               className="w-full px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f] bg-gray-50"
             />
           </div>
@@ -63,7 +69,9 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
               type="number"
               placeholder="Number of period per week"
               value={formData.periodsPerWeek}
-              onChange={(e) => setFormData({ ...formData, periodsPerWeek: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, periodsPerWeek: e.target.value })
+              }
               className="w-full px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f] bg-gray-50"
               min="1"
             />
@@ -76,7 +84,9 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
               type="text"
               placeholder="Assign Teacher"
               value={formData.assignedTeacher}
-              onChange={(e) => setFormData({ ...formData, assignedTeacher: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, assignedTeacher: e.target.value })
+              }
               className="w-full px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f] bg-gray-50"
             />
           </div>
@@ -84,7 +94,7 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
 
         <div className="flex gap-4">
           <Button onClick={handleSubmit} variant="primary">
-            {editData ? 'Update Subject' : 'Add Subject'}
+            {editData ? "Update Subject" : "Add Subject"}
           </Button>
           <Button variant="secondary" onClick={onClose}>
             Cancel
@@ -94,7 +104,6 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
     </div>
   );
 };
-
 
 // SUBJECT TABLE COMPONENT
 const SubjectTable = ({ grade, subjects, onEdit, onDelete, onAdd }) => {
@@ -115,12 +124,18 @@ const SubjectTable = ({ grade, subjects, onEdit, onDelete, onAdd }) => {
       <table className="w-full">
         <thead>
           <tr className="border-b-2 border-gray-200">
-            <th className="text-left py-3 px-4 font-semibold text-gray-600">Subject Name</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-600">
+              Subject Name
+            </th>
             <th className="text-left py-3 px-4 font-semibold text-gray-600">
               Number of period per week
             </th>
-            <th className="text-left py-3 px-4 font-semibold text-gray-600">Assigned Teacher</th>
-            <th className="text-left py-3 px-4 font-semibold text-gray-600">Action</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-600">
+              Assigned Teacher
+            </th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-600">
+              Action
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -132,7 +147,10 @@ const SubjectTable = ({ grade, subjects, onEdit, onDelete, onAdd }) => {
             </tr>
           ) : (
             subjects.map((subject) => (
-              <tr key={subject.id} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr
+                key={subject.id}
+                className="border-b border-gray-100 hover:bg-gray-50"
+              >
                 <td className="py-4 px-4">{subject.subjectName}</td>
                 <td className="py-4 px-4">{subject.periodsPerWeek}</td>
                 <td className="py-4 px-4">{subject.assignedTeacher}</td>
@@ -161,34 +179,88 @@ const SubjectTable = ({ grade, subjects, onEdit, onDelete, onAdd }) => {
   );
 };
 
-
 // MAIN SUBJECT MANAGEMENT COMPONENT
 const SubjectManagement = () => {
   const [subjects, setSubjects] = useState([
-    { id: 1, grade: 6, subjectName: 'History', periodsPerWeek: 6, assignedTeacher: 'Mr.ABC Perera' },
-    { id: 2, grade: 6, subjectName: 'English', periodsPerWeek: 6, assignedTeacher: 'Mr.ABC Silva' },
-    { id: 3, grade: 7, subjectName: 'History', periodsPerWeek: 6, assignedTeacher: 'Mr.ABC Perera' },
-    { id: 4, grade: 7, subjectName: 'English', periodsPerWeek: 6, assignedTeacher: 'Mr.ABC Silva' },
-    { id: 5, grade: 8, subjectName: 'Mathematics', periodsPerWeek: 7, assignedTeacher: 'Ms.XYZ Fernando' },
-    { id: 6, grade: 9, subjectName: 'Science', periodsPerWeek: 6, assignedTeacher: 'Dr.John Doe' },
-    { id: 7, grade: 10, subjectName: 'Chemistry', periodsPerWeek: 5, assignedTeacher: 'Mr.ABC Perera' },
-    { id: 8, grade: 11, subjectName: 'Physics', periodsPerWeek: 6, assignedTeacher: 'Mr.ABC Silva' }
+    {
+      id: 1,
+      grade: 6,
+      subjectName: "History",
+      periodsPerWeek: 6,
+      assignedTeacher: "Mr.ABC Perera",
+    },
+    {
+      id: 2,
+      grade: 6,
+      subjectName: "English",
+      periodsPerWeek: 6,
+      assignedTeacher: "Mr.ABC Silva",
+    },
+    {
+      id: 3,
+      grade: 7,
+      subjectName: "History",
+      periodsPerWeek: 6,
+      assignedTeacher: "Mr.ABC Perera",
+    },
+    {
+      id: 4,
+      grade: 7,
+      subjectName: "English",
+      periodsPerWeek: 6,
+      assignedTeacher: "Mr.ABC Silva",
+    },
+    {
+      id: 5,
+      grade: 8,
+      subjectName: "Mathematics",
+      periodsPerWeek: 7,
+      assignedTeacher: "Ms.XYZ Fernando",
+    },
+    {
+      id: 6,
+      grade: 9,
+      subjectName: "Science",
+      periodsPerWeek: 6,
+      assignedTeacher: "Dr.John Doe",
+    },
+    {
+      id: 7,
+      grade: 10,
+      subjectName: "Chemistry",
+      periodsPerWeek: 5,
+      assignedTeacher: "Mr.ABC Perera",
+    },
+    {
+      id: 8,
+      grade: 11,
+      subjectName: "Physics",
+      periodsPerWeek: 6,
+      assignedTeacher: "Mr.ABC Silva",
+    },
   ]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [selectedGrade, setSelectedGrade] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Mock teachers list - replace with your actual teachers data
-  const teachers = ['Mr.ABC Perera', 'Mr.ABC Silva', 'Ms.XYZ Fernando', 'Dr.John Doe'];
+  const teachers = [
+    "Mr.ABC Perera",
+    "Mr.ABC Silva",
+    "Ms.XYZ Fernando",
+    "Dr.John Doe",
+  ];
 
   // Get unique grades from subjects
-  const grades = [...new Set(subjects.map(s => s.grade))].sort((a, b) => a - b);
+  const grades = [...new Set(subjects.map((s) => s.grade))].sort(
+    (a, b) => a - b
+  );
 
   // Filter grades based on search
   const filteredGrades = searchQuery
-    ? grades.filter(grade => grade.toString().includes(searchQuery))
+    ? grades.filter((grade) => grade.toString().includes(searchQuery))
     : grades;
 
   const handleAddSubject = (grade) => {
@@ -206,82 +278,86 @@ const SubjectManagement = () => {
   const handleSaveSubject = (formData) => {
     if (editingSubject) {
       // Update existing subject
-      setSubjects(subjects.map(s =>
-        s.id === editingSubject.id ? { ...s, ...formData } : s
-      ));
+      setSubjects(
+        subjects.map((s) =>
+          s.id === editingSubject.id ? { ...s, ...formData } : s
+        )
+      );
     } else {
       // Add new subject
       const newSubject = {
         id: Date.now(),
-        ...formData
+        ...formData,
       };
       setSubjects([...subjects, newSubject]);
     }
   };
 
   const handleDeleteSubject = (id) => {
-    if (window.confirm('Are you sure you want to delete this subject?')) {
-      setSubjects(subjects.filter(s => s.id !== id));
+    if (window.confirm("Are you sure you want to delete this subject?")) {
+      setSubjects(subjects.filter((s) => s.id !== id));
     }
   };
 
   const getSubjectsByGrade = (grade) => {
-    return subjects.filter(s => s.grade === grade);
+    return subjects.filter((s) => s.grade === grade);
   };
 
   return (
     <div className="flex min-h-screen bg-gray-100">
-  <Sidebar />
-  <div className="flex-1 flex flex-col">
-    <Navbar />
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <Navbar />
 
-    <div className="pt-20 px-8">
-      <div className="p-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Subject Details</h1>
-          <div className="relative w-72">
-            <input
-              type="text"
-              placeholder="Search by grade..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 pr-10 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f]"
-            />
-            <Search className="absolute right-3 top-2.5 text-gray-400" size={20} />
+        <div className="pt-20 px-8">
+          <div className="p-8">
+            <div className="flex justify-between items-center mb-8">
+              <h1 className="text-3xl font-bold">Subject Details</h1>
+              <div className="relative w-72">
+                <input
+                  type="text"
+                  placeholder="Search by grade..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f]"
+                />
+                <Search
+                  className="absolute right-3 top-2.5 text-gray-400"
+                  size={20}
+                />
+              </div>
+            </div>
+
+            {filteredGrades.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                No grades found matching your search
+              </div>
+            ) : (
+              filteredGrades.map((grade) => (
+                <SubjectTable
+                  key={grade}
+                  grade={grade}
+                  subjects={getSubjectsByGrade(grade)}
+                  onEdit={handleEditSubject}
+                  onDelete={handleDeleteSubject}
+                  onAdd={handleAddSubject}
+                />
+              ))
+            )}
           </div>
         </div>
 
-        {filteredGrades.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            No grades found matching your search
-          </div>
-        ) : (
-          filteredGrades.map((grade) => (
-            <SubjectTable
-              key={grade}
-              grade={grade}
-              subjects={getSubjectsByGrade(grade)}
-              onEdit={handleEditSubject}
-              onDelete={handleDeleteSubject}
-              onAdd={handleAddSubject}
-            />
-          ))
-        )}
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+          <SubjectForm
+            onClose={() => setIsModalOpen(false)}
+            onSave={handleSaveSubject}
+            editData={editingSubject}
+            teachers={teachers}
+            grade={selectedGrade}
+          />
+        </Modal>
       </div>
     </div>
-
-    <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-      <SubjectForm
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveSubject}
-        editData={editingSubject}
-        teachers={teachers}
-        grade={selectedGrade}
-      />
-    </Modal>
-  </div>
-</div>
-
   );
 };
 
