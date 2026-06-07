@@ -1,0 +1,31 @@
+# Dependency directories
+node_modules/
+backend/venv/
+
+# Environment variables
+backend/.env
+.env
+.env.local
+.env.*.local
+
+# Python caches and temporary files
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
