@@ -1,16 +1,38 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-import asyncio
-import logging
-
+from app.database import get_database, close_client
 from app.routes import subject_routes, auth_routes
-from app.database import close_client, get_database
 
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI()
+# ---- Lifespan (startup / shutdown) ----
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Connecting to MongoDB...")
+    try:
+        db = get_database()
+        await db.command('ping')
+        print("Successfully connected to MongoDB!")
+    except Exception as e:
+        print(f"\n[ERROR] Failed to connect to MongoDB: {e}")
+        print("Please check your password and connection string in backend/.env\n")
+    yield
+    await close_client()
+    print("MongoDB connection closed.")
 
+app = FastAPI(lifespan=lifespan)
+
+# ---- Root endpoint ----
+@app.get("/")
+def read_root():
+    return {"message": "Backend is running successfully 🚀"}
+
+# ---- CORS middleware ----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -24,12 +46,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---- Include routers ----
 app.include_router(subject_routes.router)
 app.include_router(auth_routes.router)
 
-# Background task that will keep trying to connect to MongoDB and log status
+# ---- Background DB monitor task ----
 _db_monitor_task: asyncio.Task | None = None
-
 
 async def _monitor_db_connection(poll_interval: int = 10):
     """Continuously try to ping the DB until successful and log the result."""
@@ -48,17 +70,11 @@ async def _monitor_db_connection(poll_interval: int = 10):
             logger.warning("MongoDB not reachable yet: %s", e)
             await asyncio.sleep(poll_interval)
 
-@app.get("/")
-def read_root():
-    return {"message": "Backend is running successfully 🚀"}
-
 @app.on_event("startup")
 async def _startup_event():
     global _db_monitor_task
-    # Start background monitor that logs when DB becomes reachable
     if _db_monitor_task is None:
         _db_monitor_task = asyncio.create_task(_monitor_db_connection())
-
 
 @app.on_event("shutdown")
 async def _shutdown_event():
@@ -69,9 +85,9 @@ async def _shutdown_event():
             await _db_monitor_task
         except asyncio.CancelledError:
             pass
-    # Close MongoDB client on shutdown
-    await close_client()
+    # client already closed via lifespan
 
+# ---- Health endpoint ----
 @app.get("/health/db")
 async def health_db():
     db = get_database()
