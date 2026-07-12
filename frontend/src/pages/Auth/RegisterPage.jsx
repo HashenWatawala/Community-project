@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { registerUser } from "../../utils/auth";
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -18,15 +19,19 @@ const RegisterPage = () => {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (form.password !== form.confirmPassword) {
       alert("Passwords do not match");
       return;
     }
-    // TODO: Hook up to your API
-    console.log("Register payload:", form);
-    navigate("/login");
+    try {
+      await registerUser(form);
+      navigate("/login");
+    } catch (err) {
+      console.error("Register failed:", err);
+      alert(err.message || "Register failed");
+    }
   };
 
   return (

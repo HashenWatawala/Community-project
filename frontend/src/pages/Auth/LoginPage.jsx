@@ -13,11 +13,12 @@ const LoginPage = () => {
     // login logic here
     try {
       const result = await loginUser(username, password);
-      if (result.success) {
+      if (result && result.access_token) {
         navigate("/dashboard");
       }
     } catch (error) {
       console.error("Login failed:", error);
+      alert(error.message || "Login failed");
     }
   };
 
@@ -32,7 +33,7 @@ const LoginPage = () => {
             alt="Class Planner logo"
             className="w-56 md:w-64 lg:w-72 h-auto object-contain"
             loading="eager"
-            fetchpriority="high"
+            fetchPriority="high"
           />
         </div>
 

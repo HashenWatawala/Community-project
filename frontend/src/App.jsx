@@ -6,7 +6,6 @@ import GenerateTimetable from "./pages/Timetable/GenerateTimetable";
 import ViewTimetable from "./pages/Timetable/ViewTimetable";
 import LoginPage from "./pages/Auth/LoginPage";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import ClassManagement from "./pages/Management/ClassManagement";
 import RegisterPage from "./pages/Auth/RegisterPage";
 import TeacherManagement from "./pages/Management/TeacherManagement";
 import SubjectManagement from "./pages/Management/SubjectManagement";
@@ -30,23 +29,7 @@ function App() {
           }
         />
 
-        <Route
-          path="/class-management"
-          element={
-            <ProtectedRoute>
-              <ClassManagement />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/teacher-management"
-          element={
-            <ProtectedRoute>
-              <TeacherManagement />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/teacher-management" element={<TeacherManagement />} />
 
         <Route path="/subject-management" element={<SubjectManagement />} />
 
