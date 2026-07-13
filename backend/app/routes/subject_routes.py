@@ -4,7 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas.subject_schema import SubjectCreate, SubjectOut, SubjectUpdate
+from app.schemas.subject_schema import SubjectCreate, Subject, SubjectUpdate
 from app.models.subject_model import (
 	create_subject,
 	delete_subject,
@@ -17,17 +17,17 @@ from app.models.subject_model import (
 router = APIRouter(prefix="/api/subjects", tags=["subjects"])
 
 
-@router.get("/", response_model=List[SubjectOut])
+@router.get("/", response_model=List[Subject])
 async def get_all_subjects():
 	return await list_subjects()
 
 
-@router.get("/grade/{grade}", response_model=List[SubjectOut])
+@router.get("/grade/{grade}", response_model=List[Subject])
 async def get_subjects_for_grade(grade: int):
 	return await list_subjects_by_grade(grade)
 
 
-@router.get("/{subject_id}", response_model=SubjectOut)
+@router.get("/{subject_id}", response_model=Subject)
 async def get_subject_by_id(subject_id: str):
 	subject = await get_subject(subject_id)
 	if not subject:
@@ -35,12 +35,12 @@ async def get_subject_by_id(subject_id: str):
 	return subject
 
 
-@router.post("/", response_model=SubjectOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=Subject, status_code=status.HTTP_201_CREATED)
 async def create_subject_endpoint(payload: SubjectCreate):
 	return await create_subject(payload.model_dump())
 
 
-@router.put("/{subject_id}", response_model=SubjectOut)
+@router.put("/{subject_id}", response_model=Subject)
 async def update_subject_endpoint(subject_id: str, payload: SubjectUpdate):
 	updates = {k: v for k, v in payload.model_dump().items() if v is not None}
 	if not updates:

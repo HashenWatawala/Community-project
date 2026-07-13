@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, X, Plus, Edit2, Trash2 } from "lucide-react";
 import Button from "../../components/Button.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
@@ -35,7 +35,11 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
       formData.periodsPerWeek &&
       formData.assignedTeacher
     ) {
-      onSave({ ...formData, grade });
+      onSave({
+        ...formData,
+        periodsPerWeek: parseInt(formData.periodsPerWeek, 10),
+        grade: parseInt(grade, 10),
+      });
       onClose();
     }
   };
@@ -80,15 +84,21 @@ const SubjectForm = ({ onClose, onSave, editData = null, teachers, grade }) => {
 
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <input
-              type="text"
-              placeholder="Assign Teacher"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Assign Teacher</label>
+            <select
               value={formData.assignedTeacher}
               onChange={(e) =>
                 setFormData({ ...formData, assignedTeacher: e.target.value })
               }
               className="w-full px-4 py-2.5 border border-gray-300 rounded focus:outline-none focus:border-[#1e3a5f] bg-gray-50"
-            />
+            >
+              <option value="">Select a teacher</option>
+              {(teachers || []).map((t) => (
+                <option key={t.id} value={t.fullName}>
+                  {t.fullName} {t.subject ? `(${t.subject})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -181,80 +191,57 @@ const SubjectTable = ({ grade, subjects, onEdit, onDelete, onAdd }) => {
 
 // MAIN SUBJECT MANAGEMENT COMPONENT
 const SubjectManagement = () => {
-  const [subjects, setSubjects] = useState([
-    {
-      id: 1,
-      grade: 6,
-      subjectName: "History",
-      periodsPerWeek: 6,
-      assignedTeacher: "Mr.ABC Perera",
-    },
-    {
-      id: 2,
-      grade: 6,
-      subjectName: "English",
-      periodsPerWeek: 6,
-      assignedTeacher: "Mr.ABC Silva",
-    },
-    {
-      id: 3,
-      grade: 7,
-      subjectName: "History",
-      periodsPerWeek: 6,
-      assignedTeacher: "Mr.ABC Perera",
-    },
-    {
-      id: 4,
-      grade: 7,
-      subjectName: "English",
-      periodsPerWeek: 6,
-      assignedTeacher: "Mr.ABC Silva",
-    },
-    {
-      id: 5,
-      grade: 8,
-      subjectName: "Mathematics",
-      periodsPerWeek: 7,
-      assignedTeacher: "Ms.XYZ Fernando",
-    },
-    {
-      id: 6,
-      grade: 9,
-      subjectName: "Science",
-      periodsPerWeek: 6,
-      assignedTeacher: "Dr.John Doe",
-    },
-    {
-      id: 7,
-      grade: 10,
-      subjectName: "Chemistry",
-      periodsPerWeek: 5,
-      assignedTeacher: "Mr.ABC Perera",
-    },
-    {
-      id: 8,
-      grade: 11,
-      subjectName: "Physics",
-      periodsPerWeek: 6,
-      assignedTeacher: "Mr.ABC Silva",
-    },
-  ]);
+  const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [selectedGrade, setSelectedGrade] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Mock teachers list - replace with your actual teachers data
-  const teachers = [
-    "Mr.ABC Perera",
-    "Mr.ABC Silva",
-    "Ms.XYZ Fernando",
-    "Dr.John Doe",
-  ];
+  useEffect(() => {
+    fetchSubjects();
+    fetchTeachers();
+  }, []);
 
-  // Get unique grades from subjects
-  const grades = [...new Set(subjects.map((s) => s.grade))].sort(
+  const fetchSubjects = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:8000/api/subjects/");
+      if (!response.ok) throw new Error("Failed to fetch subjects");
+      const data = await response.json();
+      setSubjects(data);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load subjects from backend");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/teachers/");
+      if (!res.ok) throw new Error("Failed to fetch teachers");
+      const data = await res.json();
+      setTeachers(data);
+    } catch (err) {
+      console.error(err);
+      // keep UI usable even if teachers endpoint fails
+    }
+  };
+
+  // teachers are fetched from backend
+
+  // Standard grades to ensure a user is never locked out of adding subjects
+  const standardGrades = [6, 7, 8, 9, 10, 11];
+
+  // Get unique grades from subjects, always ensuring standard grades (6-11) are available
+  const grades = [...new Set([...standardGrades, ...subjects.map((s) => s.grade)])].sort(
     (a, b) => a - b
   );
 
@@ -275,27 +262,52 @@ const SubjectManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubject = (formData) => {
-    if (editingSubject) {
-      // Update existing subject
-      setSubjects(
-        subjects.map((s) =>
-          s.id === editingSubject.id ? { ...s, ...formData } : s
-        )
-      );
-    } else {
-      // Add new subject
-      const newSubject = {
-        id: Date.now(),
-        ...formData,
-      };
-      setSubjects([...subjects, newSubject]);
+  const handleSaveSubject = async (formData) => {
+    try {
+      if (editingSubject) {
+        // Update existing subject
+        const response = await fetch(`http://localhost:8000/api/subjects/${editingSubject.id}/`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+        if (!response.ok) throw new Error("Failed to update subject");
+        const updated = await response.json();
+        setSubjects(subjects.map((s) => (s.id === editingSubject.id ? updated : s)));
+        setSuccessMessage("Subject updated successfully.");
+        setTimeout(() => setSuccessMessage(""), 3000);
+      } else {
+        // Add new subject
+        const response = await fetch("http://localhost:8000/api/subjects/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+        if (!response.ok) throw new Error("Failed to create subject");
+        const created = await response.json();
+        setSubjects([...subjects, created]);
+        setSuccessMessage("Subject created successfully.");
+        setTimeout(() => setSuccessMessage(""), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+      setTimeout(() => setError(null), 4000);
     }
   };
 
-  const handleDeleteSubject = (id) => {
+  const handleDeleteSubject = async (id) => {
     if (window.confirm("Are you sure you want to delete this subject?")) {
-      setSubjects(subjects.filter((s) => s.id !== id));
+      try {
+        const response = await fetch(`http://localhost:8000/api/subjects/${id}/`, {
+          method: "DELETE",
+        });
+        if (!response.ok) throw new Error("Failed to delete subject");
+        setSubjects(subjects.filter((s) => s.id !== id));
+      } catch (err) {
+        console.error(err);
+        alert(err.message);
+      }
     }
   };
 
@@ -311,6 +323,16 @@ const SubjectManagement = () => {
 
         <div className="pt-20 px-8">
           <div className="p-8">
+            {error && (
+              <div className="mb-4 bg-red-100 border border-red-200 text-red-700 px-4 py-2 rounded">
+                {error}
+              </div>
+            )}
+            {successMessage && (
+              <div className="mb-4 bg-green-100 border border-green-200 text-green-700 px-4 py-2 rounded">
+                {successMessage}
+              </div>
+            )}
             <div className="flex justify-between items-center mb-8">
               <h1 className="text-3xl font-bold">Subject Details</h1>
               <div className="relative w-72">

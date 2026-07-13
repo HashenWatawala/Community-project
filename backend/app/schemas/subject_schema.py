@@ -36,3 +36,8 @@ class SubjectOut(SubjectBase):
 			}
 		}
 
+
+# Backwards-compatible alias used by route annotations
+# The routes import `Subject` — provide that name as an alias to `SubjectOut`.
+Subject = SubjectOut
+
