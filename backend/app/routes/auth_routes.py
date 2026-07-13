@@ -12,7 +12,7 @@ from app.schemas.user_schema import UserCreate, UserOut, LoginPayload, TokenResp
 from app.models.user_model import get_user_by_username, get_user_by_email, create_user
 from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -35,8 +35,9 @@ async def register(payload: UserCreate) -> Any:
         if existing_email:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-        truncated = payload.password.encode('utf-8')[:72].decode('utf-8', errors='ignore')        
-        hashed = pwd_context.hash(truncated)
+        # use full password; `bcrypt_sha256` pre-hashes long passwords
+        # while still allowing verification of existing bcrypt hashes
+        hashed = pwd_context.hash(payload.password)
         user_doc = payload.model_dump()
         user_doc["hashed_password"] = hashed
         user_doc.pop("password", None)

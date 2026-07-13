@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import get_database, close_client
-from app.routes import subject_routes, auth_routes
+from app.routes import subject_routes, auth_routes, teacher_routes
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -49,6 +49,7 @@ app.add_middleware(
 # ---- Include routers ----
 app.include_router(subject_routes.router)
 app.include_router(auth_routes.router)
+app.include_router(teacher_routes.router)
 
 # ---- Background DB monitor task ----
 _db_monitor_task: asyncio.Task | None = None
