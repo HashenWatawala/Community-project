@@ -3,6 +3,7 @@ import { Search, X, Plus, Edit2, Trash2 } from "lucide-react";
 import Button from "../../components/Button.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
 import Navbar from "../../components/Navbar.jsx";
+import { API, getUser } from "../../utils/auth.js";
 
 // OVERLAY MODAL COMPONENT
 const Modal = ({ isOpen, onClose, children }) => {
@@ -210,7 +211,9 @@ const SubjectManagement = () => {
   const fetchSubjects = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/subjects/");
+      const response = await fetch(`${API}/api/subjects/`, {
+        headers: { ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}) },
+      });
       if (!response.ok) throw new Error("Failed to fetch subjects");
       const data = await response.json();
       setSubjects(data);
@@ -225,7 +228,9 @@ const SubjectManagement = () => {
 
   const fetchTeachers = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/teachers/");
+      const res = await fetch(`${API}/api/teachers/`, {
+        headers: { ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}) },
+      });
       if (!res.ok) throw new Error("Failed to fetch teachers");
       const data = await res.json();
       setTeachers(data);
@@ -266,9 +271,12 @@ const SubjectManagement = () => {
     try {
       if (editingSubject) {
         // Update existing subject
-        const response = await fetch(`http://localhost:8000/api/subjects/${editingSubject.id}/`, {
+        const response = await fetch(`${API}/api/subjects/${editingSubject.id}/`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+          },
           body: JSON.stringify(formData),
         });
         if (!response.ok) throw new Error("Failed to update subject");
@@ -278,9 +286,12 @@ const SubjectManagement = () => {
         setTimeout(() => setSuccessMessage(""), 3000);
       } else {
         // Add new subject
-        const response = await fetch("http://localhost:8000/api/subjects/", {
+        const response = await fetch(`${API}/api/subjects/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+          },
           body: JSON.stringify(formData),
         });
         if (!response.ok) throw new Error("Failed to create subject");
@@ -299,8 +310,9 @@ const SubjectManagement = () => {
   const handleDeleteSubject = async (id) => {
     if (window.confirm("Are you sure you want to delete this subject?")) {
       try {
-        const response = await fetch(`http://localhost:8000/api/subjects/${id}/`, {
+        const response = await fetch(`${API}/api/subjects/${id}/`, {
           method: "DELETE",
+          headers: { ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}) },
         });
         if (!response.ok) throw new Error("Failed to delete subject");
         setSubjects(subjects.filter((s) => s.id !== id));
