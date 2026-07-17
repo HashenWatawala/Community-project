@@ -1,36 +1,73 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, Plus, Edit2, Trash2, X } from "lucide-react";
 import Button from "../../components/Button";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
+import { API, getUser } from "../../utils/auth.js";
 
 const TeacherManagement = () => {
-  const [teachers, setTeachers] = useState([
-   
-  ]);
+  const [teachers, setTeachers] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [formData, setFormData] = useState({
-    nameWithInitial: "",
+    fullName: "",
     nicNo: "",
     contactNumber: "",
     email: "",
-    hasAssignClass: "no",
+    hasAssignClass: false,
     subjects: [
       { name: "", grades: [] },
     ],
   });
 
-  const availableGrades = [
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11"
-  ];
+  const availableGrades = ["6", "7", "8", "9", "10", "11"];
+
+  useEffect(() => {
+    fetchTeachers();
+    fetchSubjects();
+  }, []);
+
+  const fetchTeachers = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API}/api/teachers/`, {
+        headers: {
+          ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch teachers");
+      const data = await res.json();
+      setTeachers(data);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Unable to load teachers.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    try {
+      const res = await fetch(`${API}/api/subjects/`, {
+        headers: {
+          ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch subjects");
+      const data = await res.json();
+      setSubjects(data);
+    } catch (err) {
+      console.error(err);
+      // keep teacher UI usable even if subjects cannot be fetched
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -68,6 +105,8 @@ const TeacherManagement = () => {
 
 
   const handleAddTeacher = () => {
+    setError(null);
+    setSaving(false);
     setEditingTeacher(null);
     setShowModal(true);
   };
@@ -75,78 +114,147 @@ const TeacherManagement = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingTeacher(null);
+    setError(null);
+    setSaving(false);
     setFormData({
-      nameWithInitial: "",
+      fullName: "",
       nicNo: "",
       contactNumber: "",
       email: "",
-      hasAssignClass: "no",
-      subjects: [
-      {name:"", grades:[]}
-      ],
-    
+      hasAssignClass: false,
+      subjects: [{ name: "", grades: [] }],
     });
   };
 
-  const handleSaveTeacher = () => {
-    const assignedSubjects = formData.subjects.filter(
-      (s) => s.name && s.grades.length > 0
-    );
+  const defaultSubjectOptions = [
+    "Sinhala",
+    "Maths",
+    "Science",
+    "English",
+    "P.T.S",
+    "Religion",
+    "History",
+    "Geography",
+    "C.T.E",
+    "Health Science",
+    "Dancing",
+    "Art",
+    "Tamil",
+    "ICT",
+    "Home Science",
+    "Library",
+  ];
 
-    if (editingTeacher) {
-      // existing teacher
-      const updatedTeachers = teachers.map((t) =>
-        t.id === editingTeacher.id
-          ? {
-              ...t,
-              name: formData.nameWithInitial || "Unnamed Teacher",
-              subjects: assignedSubjects.map((s) => ({
-                name: s.name,
-                grades: s.grades,
-              })),
-            }
-          : t
-      );
-      setTeachers(updatedTeachers);
-    } else {
-      // ADD new teacher
-      const newTeacher = {
-        id: teachers.length + 1,
-        name: formData.nameWithInitial || "Unnamed Teacher",
-        subjects:
-          assignedSubjects.length > 0
-            ? assignedSubjects.map((s) => ({
-                name: s.name,
-                grades: s.grades,
-              }))
-            : [],
-      };
-      setTeachers([...teachers, newTeacher]);
+  const subjectOptions = Array.from(
+    new Set([
+      ...defaultSubjectOptions,
+      ...subjects.map((s) => s.subjectName).filter(Boolean),
+    ])
+  );
+
+  const normalizeSubjectAssignments = (subjects) =>
+    subjects
+      .filter((subject) => subject.name && subject.grades.length > 0)
+      .map((subject) => ({
+        name: subject.name,
+        grades: subject.grades.map((grade) => parseInt(grade, 10)),
+      }));
+
+  const handleSaveTeacher = async () => {
+    const normalizedSubjects = normalizeSubjectAssignments(formData.subjects);
+    const payload = {
+      fullName: formData.fullName.trim() || "Unnamed Teacher",
+      nicNo: formData.nicNo?.trim() || null,
+      contactNumber: formData.contactNumber?.trim() || null,
+      email: formData.email?.trim() || "",
+      hasAssignClass: formData.hasAssignClass,
+      subjects: normalizedSubjects,
+    };
+
+    if (!payload.fullName) {
+      setError("Teacher name is required.");
+      return;
+    }
+    if (!payload.email) {
+      setError("Teacher email is required.");
+      return;
     }
 
-    handleCloseModal();
+    setSaving(true);
+    try {
+      const url = editingTeacher
+        ? `${API}/api/teachers/${editingTeacher.id}`
+        : `${API}/api/teachers/`;
+      const method = editingTeacher ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || "Unable to save teacher.");
+      }
+
+      const savedTeacher = await res.json();
+      setTeachers((prev) =>
+        editingTeacher
+          ? prev.map((teacher) =>
+              teacher.id === savedTeacher.id ? savedTeacher : teacher
+            )
+          : [...prev, savedTeacher]
+      );
+
+      handleCloseModal();
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Unable to save teacher.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEditTeacher = (teacher) => {
     setEditingTeacher(teacher);
-    setShowModal(true);
-
     setFormData({
-      nameWithInitial: teacher.name,
-      nicNo: "",
-      contactNumber: "",
-      email: "",
-      hasAssignClass: "no",
-      subjects: teacher.subjects.length > 0 
-      ? teacher.subjects.map(s => ({ name: s.name, grades: s.grades }))
-      : [{ name: "", grades: [] }]
-  });
-};
-  
+      fullName: teacher.fullName || "",
+      nicNo: teacher.nicNo || "",
+      contactNumber: teacher.contactNumber || "",
+      email: teacher.email || "",
+      hasAssignClass: Boolean(teacher.hasAssignClass),
+      subjects:
+        teacher.subjects?.length > 0
+          ? teacher.subjects.map((s) => ({ name: s.name, grades: s.grades }))
+          : [{ name: "", grades: [] }],
+    });
+    setShowModal(true);
+  };
 
-  const handleDeleteTeacher = (id) => {
-    if (window.confirm("Are you sure you want to delete this teacher?")) {
+  const handleDeleteTeacher = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this teacher?")) return;
+
+    try {
+      const res = await fetch(`${API}/api/teachers/${id}`, {
+        method: "DELETE",
+        headers: {
+          ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.detail || "Unable to delete teacher.");
+      }
       setTeachers((prev) => prev.filter((t) => t.id !== id));
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Unable to delete teacher.");
     }
   };
 
@@ -192,9 +300,9 @@ const TeacherManagement = () => {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <input
                   type="text"
-                  name="nameWithInitial"
-                  placeholder="Name with initial"
-                  value={formData.nameWithInitial}
+                  name="fullName"
+                  placeholder="Full teacher name"
+                  value={formData.fullName}
                   onChange={handleInputChange}
                   className="border border-gray-300 rounded px-3 py-2"
                 />
@@ -235,8 +343,8 @@ const TeacherManagement = () => {
       <input
         type="radio"
         name="hasAssignClass"
-        checked={formData.hasAssignClass === "yes"}
-        onChange={() => handleRadioChange("yes")}
+        checked={formData.hasAssignClass === true}
+        onChange={() => handleRadioChange(true)}
         style={{ accentColor: '#1e293b' }}
         className="cursor-pointer"
       />
@@ -247,8 +355,8 @@ const TeacherManagement = () => {
       <input
         type="radio"
         name="hasAssignClass"
-        checked={formData.hasAssignClass === "no"}
-        onChange={() => handleRadioChange("no")}
+        checked={formData.hasAssignClass === false}
+        onChange={() => handleRadioChange(false)}
         style={{ accentColor: '#1e293b' }}
         className="cursor-pointer"
       />
@@ -287,7 +395,7 @@ const TeacherManagement = () => {
             <option value="" disabled hidden>
               Select Subject
             </option>
-            {["Sinhala", "Maths", "Science", "English", "P.T.S", "Religion","History","Geography","C.T.E","Health Science","Dancing","Art","Tamil","ICT","Home Science","Library"].map((subj) => (
+            {subjectOptions.map((subj) => (
               <option key={subj} value={subj}>
                 {subj}
               </option>
@@ -399,6 +507,11 @@ const TeacherManagement = () => {
   Add Another Subject
 </button>
 
+              {error && (
+                <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
               <div className="flex justify-end gap-3 mt-6">
                 <Button
                   onClick={handleCloseModal}
@@ -411,9 +524,10 @@ const TeacherManagement = () => {
                 <Button
                   onClick={handleSaveTeacher}
                   size="md"
+                  disabled={saving}
                   className="!bg-slate-800 !text-white hover:!bg-slate-700"
                 >
-                  {editingTeacher ? "Update" : "Save"}
+                  {saving ? (editingTeacher ? "Updating..." : "Saving...") : editingTeacher ? "Update" : "Save"}
                 </Button>
               </div>
             </div>
@@ -438,7 +552,7 @@ const TeacherManagement = () => {
                   <tbody>
                     {teachers.map((teacher) => (
                       <tr key={teacher.id} className="border-b">
-                        <td className="py-4 px-4">{teacher.name}</td>
+                        <td className="py-4 px-4">{teacher.fullName}</td>
                         <td className="py-4 px-4">
                           {teacher.subjects.map((subject, idx) => (
                             <div key={idx} className="flex flex-wrap gap-2 mb-2">
