@@ -1,10 +1,50 @@
-import React, { useState } from "react";
+
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
+import axios from "axios";
+import { useState, useEffect } from "react";
 
 const ViewTimetable = () => {
-  const [selectedGrade, setSelectedGrade] = useState("Grade 10");
-  const [selectedTeacher, setSelectedTeacher] = useState("");
+const [selectedGrade, setSelectedGrade] = useState("Grade 10");
+const [selectedTeacher, setSelectedTeacher] = useState("");
+const [currentTimetable, setCurrentTimetable] = useState(null);
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState("");
+
+const fetchTimetable = async () => {
+  try {
+    setLoading(true);
+    setError("");
+
+    let response;
+
+    if (selectedTeacher) {
+      response = await axios.get(
+        `http://localhost:8000/api/timetable?teacherId=${selectedTeacher}`
+      );
+    } else {
+      const gradeNumber = Number(
+        selectedGrade.replace("Grade ", "")
+      );
+
+      response = await axios.get(
+        `http://localhost:8000/api/timetable?grade=${gradeNumber}`
+      );
+    }
+
+    setCurrentTimetable(response.data);
+  } catch (err) {
+    console.error(err);
+    setError("No timetable found.");
+    setCurrentTimetable(null);
+  } finally {
+    setLoading(false);
+  }
+};
+
+useEffect(() => {
+  fetchTimetable();
+}, [selectedGrade, selectedTeacher]);
 
   const grades = [
     "Grade 6",
@@ -26,202 +66,7 @@ const ViewTimetable = () => {
     "H.A.S",
   ];
 
-  const timetableData = {
-    "Grade 10": {
-      name: "Grade 10",
-      data: [
-        {
-          period: 1,
-          time: "7.45 - 8.25",
-          monday: "English(M.N.F)",
-          tuesday: "English(M.N.F)",
-          wednesday: "English(M.N.F)",
-          thursday: "English(M.N.F)",
-          friday: "English(M.N.F)",
-        },
-        {
-          period: "Break",
-          time: "8.25 - 8.30",
-          tuesday: "Register Marking Time",
-          monday: "Register Marking Time",
-          wednesday: "Register Marking Time",
-          thursday: "Register Marking Time",
-          friday: "Register Marking Time",
-          isBreak: true,
-        },
-        {
-          period: 2,
-          time: "8.30 - 9.10",
-          monday: "Sinhala(M.R.P)",
-          tuesday: "Science(A.S.T)",
-          wednesday: "Science(A.S.T)",
-          thursday: "Maths(A.P.)",
-          friday: "C.T.E (S.V)",
-        },
-        {
-          period: 3,
-          time: "9.10 - 9.50",
-          monday: "C.T.E (S.V)",
-          tuesday: "Art/Dancing(J.A.D.H.)",
-          wednesday: "Sinhala (M.R.P)",
-          thursday: "Science(A.S.T)",
-          friday: "Science(A.S.T)",
-        },
-        {
-          period: 4,
-          time: "9.50 - 10.50",
-          monday: "C.T.E (S.V)",
-          tuesday: "Art/Dancing(J.A.D.H.)",
-          wednesday: "Health Science(H.A.S)",
-          thursday: "Religion (M.M)",
-          friday: "Science(A.S.T)",
-        },
-        {
-          period: "Interval",
-          time: "10.30 - 10.50",
-          monday: "Interval",
-          tuesday: "Interval",
-          wednesday: "Interval",
-          thursday: "Interval",
-          friday: "Interval",
-          isBreak: true,
-        },
-        {
-          period: 5,
-          time: "10.50 - 11.30",
-          monday: "Health Science(H.A.S)",
-          tuesday: "Maths(A.P.)",
-          wednesday: "Sinhala (M.R.P)",
-          thursday: "Health Science(H.A.S)",
-          friday: "Health Science(H.A.S)",
-        },
-        {
-          period: 6,
-          time: "11.30 - 12.10",
-          monday: "Dancing(J.A.D.H.)",
-          tuesday: "Maths(A.P.)",
-          wednesday: "Maths(A.P.)",
-          thursday: "Maths(A.P.)",
-          friday: "Maths(A.P.)",
-        },
-        {
-          period: 7,
-          time: "12.10 - 12.50",
-          monday: "Science(A.S.T)",
-          tuesday: "Religion (M.M)",
-          wednesday: "History (S.V)",
-          thursday: "Health Science(H.A.S)",
-          friday: "Maths(A.P.)",
-        },
-        {
-          period: 8,
-          time: "12.50 - 1.30",
-          monday: "Maths(A.P.)",
-          tuesday: "Sinhala (M.R.P)",
-          wednesday: "Maths(A.P.)",
-          thursday: "Science(A.S.T)",
-          friday: "Library(M.M)",
-        },
-      ],
-    },
-    "A.P Gunadasa": {
-      name: "Mr. A.P Gunadasa",
-      data: [
-        {
-          period: 1,
-          time: "7.45 - 8.25",
-          monday: "-",
-          tuesday: "9-Maths",
-          wednesday: "9-Maths",
-          thursday: "9-Maths",
-          friday: "9-Maths",
-        },
-        {
-          period: "Break",
-          time: "8.25 - 8.30",
-          monday: "Register Making Time",
-          tuesday: "Register Making Time",
-          wednesday: "Register Making Time",
-          thursday: "Register Making Time",
-          friday: "Register Making Time",
-          isBreak: true,
-        },
-        {
-          period: 2,
-          time: "8.30 - 9.10",
-          monday: "11-Maths",
-          tuesday: "11-Maths",
-          wednesday: "7-Maths",
-          thursday: "10-Maths",
-          friday: "11-Maths",
-        },
-        {
-          period: 3,
-          time: "9.10 - 9.50",
-          monday: "9-Maths",
-          tuesday: "11-Maths",
-          wednesday: "7-Maths",
-          thursday: "11-Maths",
-          friday: "11-Maths",
-        },
-        {
-          period: 4,
-          time: "9.50 - 10.50",
-          monday: "7-Maths",
-          tuesday: "-",
-          wednesday: "-",
-          thursday: "8-Maths",
-          friday: "6-Maths",
-        },
-        {
-          period: "Interval",
-          time: "10.30 - 10.50",
-          monday: "Interval",
-          tuesday: "Interval",
-          wednesday: "Interval",
-          thursday: "Interval",
-          friday: "Interval",
-          isBreak: true,
-        },
-        {
-          period: 5,
-          time: "10.50 - 11.30",
-          monday: "8-Maths",
-          tuesday: "10-Maths",
-          wednesday: "6-Maths",
-          thursday: "-",
-          friday: "8-Maths",
-        },
-        {
-          period: 6,
-          time: "11.30 - 12.10",
-          monday: "9-Maths",
-          tuesday: "10-Maths",
-          wednesday: "10-Maths",
-          thursday: "6-Maths",
-          friday: "7-Maths",
-        },
-        {
-          period: 7,
-          time: "12.10 - 12.50",
-          monday: "-",
-          tuesday: "8-Maths",
-          wednesday: "11-Maths",
-          thursday: "7-Maths",
-          friday: "10-Maths",
-        },
-        {
-          period: 8,
-          time: "12.50 - 1.30",
-          monday: "10-Maths",
-          tuesday: "6-Maths",
-          wednesday: "10-Maths",
-          thursday: "-",
-          friday: "8-Maths",
-        },
-      ],
-    },
-  };
+
 
   const currentTimetable = selectedTeacher
     ? timetableData[selectedTeacher]
@@ -336,42 +181,86 @@ const ViewTimetable = () => {
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {currentTimetable.data.map((row, idx) => (
-                      <tr
-                        key={idx}
-                        className={`${
-                          row.isBreak
-                            ? "bg-gray-100"
-                            : idx % 2 === 0
-                            ? "bg-white"
-                            : "bg-gray-50"
-                        } hover:bg-gray-100 transition`}
-                      >
-                        <td className="border border-gray-400 px-4 py-3 text-sm font-semibold text-gray-900">
-                          {row.period}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700">
-                          {row.time}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.monday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.tuesday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.wednesday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.thursday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.friday}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+                 <tbody>
+
+{currentTimetable?.timetable &&
+  Object.entries(currentTimetable.timetable).map(
+    ([className, schedule]) => (
+
+      <React.Fragment key={className}>
+
+        <tr>
+          <td 
+            colSpan="7"
+            className="bg-blue-100 font-bold text-center py-3"
+          >
+            {className}
+          </td>
+        </tr>
+
+
+        {Object.entries(schedule).map(
+          ([day, periods]) => (
+
+            periods.map((period, idx) => (
+
+              <tr
+                key={`${day}-${idx}`}
+                className={`${
+                  idx % 2 === 0
+                    ? "bg-white"
+                    : "bg-gray-50"
+                } hover:bg-gray-100 transition`}
+              >
+
+                <td className="border border-gray-400 px-4 py-3 text-sm font-semibold text-gray-900">
+                  {period.period}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700">
+                  {period.time}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
+                  {day === "Monday" ? period.subject : ""}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
+                  {day === "Tuesday" ? period.subject : ""}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
+                  {day === "Wednesday" ? period.subject : ""}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
+                  {day === "Thursday" ? period.subject : ""}
+                </td>
+
+
+                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
+                  {day === "Friday" ? period.subject : ""}
+                </td>
+
+
+              </tr>
+
+            ))
+
+          )
+        )}
+
+      </React.Fragment>
+
+    )
+  )}
+
+</tbody>
                 </table>
               </div>
             </div>
