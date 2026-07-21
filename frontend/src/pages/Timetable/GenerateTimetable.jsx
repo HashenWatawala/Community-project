@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
+import { API } from "../../utils/auth";
 
 const GenerateTimetable = () => {
   const [selectedGrades, setSelectedGrades] = useState([]);
@@ -37,16 +38,33 @@ const GenerateTimetable = () => {
       return;
     }
 
-
     try {
       setIsLoading(true);
-      // await axios.post("/api/generate-timetable", { selectedGrades });
-      // simulate network
-      await new Promise((res) => setTimeout(res, 800));
+      const response = await fetch(`${API}/api/timetable/generate`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail = typeof data?.detail === "string"
+          ? data.detail
+          : typeof data?.detail === "object"
+            ? JSON.stringify(data.detail)
+            : "Failed to generate timetable.";
+        throw new Error(detail);
+      }
+
       setIsGenerated(true);
+      alert("Timetable generated and saved successfully.");
     } catch (err) {
-      console.error(err);
-      alert("Failed to generate timetable.");
+      const message = err instanceof Error ? err.message : "Failed to generate timetable.";
+      console.error("Timetable generation failed:", message);
+      alert(message);
     } finally {
       setIsLoading(false);
     }
