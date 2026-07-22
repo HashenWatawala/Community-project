@@ -1,274 +1,389 @@
-
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 import axios from "axios";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+
 
 const ViewTimetable = () => {
-const [selectedGrade, setSelectedGrade] = useState("Grade 10");
-const [selectedTeacher, setSelectedTeacher] = useState("");
-const [currentTimetable, setCurrentTimetable] = useState(null);
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState("");
 
-const fetchTimetable = async () => {
-  try {
-    setLoading(true);
-    setError("");
+  const [selectedGrade, setSelectedGrade] = useState("6A");
+  const [currentTimetable, setCurrentTimetable] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-    let response;
 
-    if (selectedTeacher) {
-      response = await axios.get(
-        `http://localhost:8000/api/timetable?teacherId=${selectedTeacher}`
+  const fetchTimetable = async () => {
+
+    try {
+
+      setLoading(true);
+      setError("");
+
+      const response = await axios.get(
+        "http://localhost:8000/api/timetable",
+        {
+          params:{
+            grade:selectedGrade
+          }
+        }
       );
-    } else {
-      const gradeNumber = Number(
-        selectedGrade.replace("Grade ", "")
-      );
 
-      response = await axios.get(
-        `http://localhost:8000/api/timetable?grade=${gradeNumber}`
-      );
+
+      setCurrentTimetable(response.data);
+
+
+    } catch(error){
+
+      console.log(error);
+
+      setError("No timetable found.");
+      setCurrentTimetable(null);
+
+    }
+    finally{
+
+      setLoading(false);
+
     }
 
-    setCurrentTimetable(response.data);
-  } catch (err) {
-    console.error(err);
-    setError("No timetable found.");
-    setCurrentTimetable(null);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-useEffect(() => {
-  fetchTimetable();
-}, [selectedGrade, selectedTeacher]);
+
+  useEffect(()=>{
+
+    if(selectedGrade){
+      fetchTimetable();
+    }
+
+  },[selectedGrade]);
+
+
 
   const grades = [
-    "Grade 6",
-    "Grade 7",
-    "Grade 8",
-    "Grade 9",
-    "Grade 10",
-    "Grade 11",
-  ];
-
-  const teachers = [
-    "A.P Gunadasa",
-    "M.N.F",
-    "A.S.T",
-    "M.M",
-    "S.V",
-    "J.A.D.H",
-    "M.R.P",
-    "H.A.S",
+    "6A",
+    "6B",
+    "7A",
+    "7B",
+    "8A",
+    "8B",
+    "9A",
+    "9B",
+    "10A",
+    "10B",
+    "11A",
+    "11B"
   ];
 
 
 
-  const currentTimetable = selectedTeacher
-    ? timetableData[selectedTeacher]
-    : timetableData[selectedGrade];
+  const periods = [
+    {
+      number:1,
+      time:"7:30 - 8:10"
+    },
+    {
+      number:2,
+      time:"8:10 - 8:50"
+    },
+    {
+      number:3,
+      time:"8:50 - 9:30"
+    },
+    {
+      number:4,
+      time:"9:45 - 10:25"
+    },
+    {
+      number:5,
+      time:"10:25 - 11:05"
+    },
+    {
+      number:6,
+      time:"11:05 - 11:45"
+    },
+    {
+      number:7,
+      time:"11:45 - 12:25"
+    },
+    {
+      number:8,
+      time:"12:25 - 1:05"
+    }
+  ];
+
+
 
   return (
+
     <div className="min-h-screen bg-gray-100">
-      {/* Top navbar */}
+
+
       <header>
-        <Navbar />
+        <Navbar/>
       </header>
 
+
       <div className="flex">
-        {/* Sidebar (left) */}
+
+
         <aside className="hidden md:block">
-          <Sidebar />
+          <Sidebar/>
         </aside>
 
-        {/* Main content */}
+
+
         <main className="flex-1 p-6">
+
+
           <h3 className="text-2xl font-semibold mb-6 text-gray-800">
             View Timetable
           </h3>
 
-          {/* Filter Section */}
-          <div className="bg-white rounded-xl shadow-md p-6 mb-6 border border-gray-200">
-            <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="grade-select"
-                  className="text-gray-700 font-semibold text-base whitespace-nowrap"
-                >
-                  Grade
-                </label>
-                <select
-                  id="grade-select"
-                  className="block px-4 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium cursor-pointer hover:border-gray-400 transition"
-                  value={selectedGrade}
-                  onChange={(e) => {
-                    setSelectedGrade(e.target.value);
-                    setSelectedTeacher("");
-                  }}
-                >
-                  {grades.map((grade) => (
+
+
+
+          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+
+            <div className="flex items-center gap-4">
+
+
+              <label className="font-semibold">
+                Grade
+              </label>
+
+
+              <select
+
+                value={selectedGrade}
+
+                onChange={(e)=>setSelectedGrade(e.target.value)}
+
+                className="border px-4 py-2 rounded"
+
+              >
+
+                {
+                  grades.map((grade)=>(
+
                     <option key={grade} value={grade}>
                       {grade}
                     </option>
-                  ))}
-                </select>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="teacher-select"
-                  className="text-gray-700 font-semibold text-base whitespace-nowrap"
-                >
-                  Teacher
-                </label>
-                <select
-                  id="teacher-select"
-                  className="block px-4 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium cursor-pointer hover:border-gray-400 transition"
-                  value={selectedTeacher}
-                  onChange={(e) => {
-                    setSelectedTeacher(e.target.value);
-                    setSelectedGrade("");
-                  }}
-                >
-                  <option value="">Select Teacher</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher} value={teacher}>
-                      {teacher}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  ))
+                }
+
+
+              </select>
+
+
             </div>
+
+
           </div>
 
-          {/* Timetable Section */}
-          {currentTimetable && (
-            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
-              <h4 className="text-lg font-semibold mb-6 text-gray-800 text-center">
-                Time Table -2024
-                <br />
-                {currentTimetable.name}
-              </h4>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-400">
+
+
+
+          {
+            loading && (
+
+              <p>
+                Loading timetable...
+              </p>
+
+            )
+          }
+
+
+
+          {
+            error && (
+
+              <p className="text-red-500">
+                {error}
+              </p>
+
+            )
+          }
+
+
+
+
+          {
+            currentTimetable && (
+
+
+              <div className="bg-white rounded-xl shadow-md p-6">
+
+
+                <h4 className="text-lg font-semibold text-center mb-5">
+
+                  Timetable - {currentTimetable.grade}
+
+                </h4>
+
+
+
+                <div className="overflow-x-auto">
+
+
+                <table className="min-w-full border border-gray-400">
+
+
                   <thead>
-                    <tr className="bg-white border-b-2 border-gray-400">
-                      <th className="border border-gray-400 px-4 py-3 text-left text-sm font-bold text-gray-900">
-                        No. of Period
+
+
+                    <tr>
+
+                      <th className="border px-4 py-3">
+                        Period
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-left text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Time
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Monday
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Tuesday
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Wednesday
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Thursday
                       </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
+
+
+                      <th className="border px-4 py-3">
                         Friday
                       </th>
+
+
                     </tr>
+
+
                   </thead>
-                 <tbody>
-
-{currentTimetable?.timetable &&
-  Object.entries(currentTimetable.timetable).map(
-    ([className, schedule]) => (
-
-      <React.Fragment key={className}>
-
-        <tr>
-          <td 
-            colSpan="7"
-            className="bg-blue-100 font-bold text-center py-3"
-          >
-            {className}
-          </td>
-        </tr>
 
 
-        {Object.entries(schedule).map(
-          ([day, periods]) => (
-
-            periods.map((period, idx) => (
-
-              <tr
-                key={`${day}-${idx}`}
-                className={`${
-                  idx % 2 === 0
-                    ? "bg-white"
-                    : "bg-gray-50"
-                } hover:bg-gray-100 transition`}
-              >
-
-                <td className="border border-gray-400 px-4 py-3 text-sm font-semibold text-gray-900">
-                  {period.period}
-                </td>
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700">
-                  {period.time}
-                </td>
+                  <tbody>
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
-                  {day === "Monday" ? period.subject : ""}
-                </td>
+                  {
+                    periods.map((p)=>{
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
-                  {day === "Tuesday" ? period.subject : ""}
-                </td>
+                      const getSubject = (day)=>{
+
+                        const dayData =
+                        currentTimetable.days?.[day];
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
-                  {day === "Wednesday" ? period.subject : ""}
-                </td>
+                        const found =
+                        dayData?.find(
+                          item=>item.period===p.number
+                        );
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
-                  {day === "Thursday" ? period.subject : ""}
-                </td>
+                        return found?.subject || "";
+
+                      };
 
 
-                <td className="border border-gray-400 px-4 py-3 text-sm text-center">
-                  {day === "Friday" ? period.subject : ""}
-                </td>
+
+                      return (
+
+                        <tr key={p.number}>
 
 
-              </tr>
+                          <td className="border px-4 py-3 text-center">
+                            {p.number}
+                          </td>
 
-            ))
 
-          )
-        )}
+                          <td className="border px-4 py-3 text-center">
+                            {p.time}
+                          </td>
 
-      </React.Fragment>
 
-    )
-  )}
 
-</tbody>
+                          <td className="border px-4 py-3 text-center">
+                            {getSubject("Monday")}
+                          </td>
+
+
+                          <td className="border px-4 py-3 text-center">
+                            {getSubject("Tuesday")}
+                          </td>
+
+
+                          <td className="border px-4 py-3 text-center">
+                            {getSubject("Wednesday")}
+                          </td>
+
+
+                          <td className="border px-4 py-3 text-center">
+                            {getSubject("Thursday")}
+                          </td>
+
+
+                          <td className="border px-4 py-3 text-center">
+                            {getSubject("Friday")}
+                          </td>
+
+
+
+                        </tr>
+
+                      );
+
+
+                    })
+                  }
+
+
+                  </tbody>
+
+
                 </table>
+
+
+                </div>
+
+
               </div>
-            </div>
-          )}
+
+
+            )
+          }
+
+
+
         </main>
+
+
       </div>
+
+
     </div>
+
   );
+
+
 };
+
 
 export default ViewTimetable;
