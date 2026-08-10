@@ -9,11 +9,11 @@ const Sidebar = () => {
     { name: "Subject Management", path: "/subject-management" },
     { name: "Class Management", path: "/class-management" },
     { name: "Generate Timetable", path: "/generate-timetable" },
-    { name: "View Timetables", path: "/view-timetables" },
+    { name: "View Timetable", path: "/view-timetable" },
   ];
 
   return (
-    <div className="w-[380px] h-[1130px] bg-[#0b2948] text-white flex flex-col px-6 py-10">
+    <div className="w-64 md:w-72 lg:w-80 h-screen sticky top-0 bg-[#0b2948] text-white flex flex-col px-6 py-10 flex-shrink-0 overflow-y-auto">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-16">
         <FaClipboardList size={36} />
