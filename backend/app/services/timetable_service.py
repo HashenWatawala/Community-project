@@ -18,7 +18,7 @@ from app.services.timetable_validator import validate_timetable
 logger = logging.getLogger("uvicorn.error")
 
 # Max retries if AI output fails validation
-_MAX_RETRIES = 3
+_MAX_RETRIES = 5
 
 
 async def generate_and_save_timetable() -> Dict[str, Any]:
@@ -64,6 +64,8 @@ async def generate_and_save_timetable() -> Dict[str, Any]:
         try:
             raw_timetable = await generate_timetable_from_ai(teachers, subjects)
         except ValueError as exc:
+            # ValueError contains diagnostic info (pre-flight failures, solver
+            # exhaustion details).  Surface it directly so the user can act.
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
@@ -72,7 +74,7 @@ async def generate_and_save_timetable() -> Dict[str, Any]:
             logger.exception("Unexpected error during timetable generation attempt %d", attempt)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Gemini AI error: {exc}",
+                detail=f"Timetable generation error: {exc}",
             )
 
         # ── Validate ──────────────────────────────────────────────────────────

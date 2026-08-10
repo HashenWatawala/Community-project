@@ -20,7 +20,7 @@ from app.services.timetable_service import (
 router = APIRouter(prefix="/api/timetable", tags=["timetable"])
 
 
-@router.post("/generate", response_model=TimetableResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/generate", status_code=status.HTTP_201_CREATED)
 async def generate_timetable_endpoint():
     """
     Generates a weekly clash-free school timetable using Gemini AI and saves it to MongoDB.
@@ -37,7 +37,7 @@ async def generate_timetable_endpoint():
         )
 
 
-@router.get("/", response_model=Union[TimetableResponse, TeacherTimetableResponse, GradeTimetableResponse, ClassScheduleSchema])
+@router.get("/")
 async def get_timetable_endpoint(
     teacherId: Optional[str] = Query(None, description="Get dynamically computed schedule for a specific teacher"),
     grade: Optional[int] = Query(None, ge=6, le=11, description="Get dynamically filtered schedule for a grade (6-11)"),

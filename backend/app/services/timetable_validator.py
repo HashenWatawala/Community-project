@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any, Dict, List
+
+
+
+def _normalize_subject_name(value: Any) -> str:
+    return str(value).strip().lower()
+
+
+def _normalize_id(value: Any) -> str:
+    return str(value).strip()
 
 
 def validate_timetable(
@@ -22,7 +32,8 @@ def validate_timetable(
     Returns:
         {"is_valid": bool, "errors": List[Dict[str, Any]]}
     """
-    errors: List[Dict[str, Any]] = []
+    hard_errors: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, Any]] = []
 
     # ── Lookups ──────────────────────────────────────────────────────────────
     # Normalise IDs to stripped lowercase strings for robust comparison
@@ -39,7 +50,7 @@ def validate_timetable(
     # ── Check that all expected classes are present ───────────────────────────
     for cls in expected_classes:
         if cls not in timetable_data:
-            errors.append({
+            hard_errors.append({
                 "type": "missing_class",
                 "message": f"Class {cls} is missing from the generated timetable.",
                 "details": {"class": cls},
@@ -52,6 +63,9 @@ def validate_timetable(
         day: {p: {} for p in range(1, 9)} for day in days_of_week
     }
 
+    # ── Per-teacher weekly load counts: teacher_id → periods scheduled ────────
+    teacher_weekly_load: Dict[str, int] = {str(t['id']).strip(): 0 for t in teachers}
+
     # ── Per-class subject counters: class → subject_id → count ───────────────
     subject_counts: Dict[str, Dict[str, int]] = {cls: {} for cls in active_classes}
 
@@ -60,7 +74,7 @@ def validate_timetable(
         try:
             class_grade = int(class_name[:-1])
         except ValueError:
-            errors.append({
+            hard_errors.append({
                 "type": "invalid_class_name",
                 "message": f"Cannot parse grade from class name: {class_name}",
                 "details": {"class": class_name},
@@ -72,7 +86,7 @@ def validate_timetable(
         for day in days_of_week:
             # ── Day presence ──────────────────────────────────────────────────
             if day not in class_schedule:
-                errors.append({
+                hard_errors.append({
                     "type": "missing_day",
                     "message": f"Day '{day}' missing in schedule for class {class_name}.",
                     "details": {"class": class_name, "day": day},
@@ -81,7 +95,7 @@ def validate_timetable(
 
             periods_list = class_schedule[day]
             if not isinstance(periods_list, list):
-                errors.append({
+                hard_errors.append({
                     "type": "invalid_day_format",
                     "message": f"Schedule for {class_name}/{day} must be a list.",
                     "details": {"class": class_name, "day": day},
@@ -92,7 +106,7 @@ def validate_timetable(
 
             for entry in periods_list:
                 if not isinstance(entry, dict):
-                    errors.append({
+                    hard_errors.append({
                         "type": "invalid_period_format",
                         "message": f"Period entry in {class_name}/{day} must be an object.",
                         "details": {"class": class_name, "day": day},
@@ -109,7 +123,7 @@ def validate_timetable(
 
                 # ── Required fields ────────────────────────────────────────────
                 if p_num is None or not sub_id or not teach_id:
-                    errors.append({
+                    hard_errors.append({
                         "type": "incomplete_period_entry",
                         "message": (
                             f"Incomplete period entry in {class_name}/{day}. "
@@ -119,9 +133,11 @@ def validate_timetable(
                     })
                     continue
 
+                # (no interval sentinel expected; every class must have 8 real periods)
+
                 # ── Period range ────────────────────────────────────────────────
                 if not isinstance(p_num, int) or p_num < 1 or p_num > 8:
-                    errors.append({
+                    hard_errors.append({
                         "type": "invalid_period_number",
                         "message": f"Period {p_num} in {class_name}/{day} is out of range (1–8).",
                         "details": {"class": class_name, "day": day, "period": p_num},
@@ -130,7 +146,7 @@ def validate_timetable(
 
                 # ── Duplicate period (period clash within class) ────────────────
                 if p_num in seen_periods:
-                    errors.append({
+                    hard_errors.append({
                         "type": "period_clash",
                         "message": f"Period {p_num} appears more than once for {class_name}/{day}.",
                         "details": {"class": class_name, "day": day, "period": p_num},
@@ -140,7 +156,7 @@ def validate_timetable(
                 # ── Subject exists in DB ────────────────────────────────────────
                 subject = subject_lookup.get(sub_id)
                 if not subject:
-                    errors.append({
+                    hard_errors.append({
                         "type": "invalid_subject",
                         "message": (
                             f"Subject ID '{sub_id}' in {class_name}/{day} P{p_num} "
@@ -155,7 +171,7 @@ def validate_timetable(
 
                 # ── Grade subject match ─────────────────────────────────────────
                 if subject["grade"] != class_grade:
-                    errors.append({
+                    hard_errors.append({
                         "type": "grade_subject_mismatch",
                         "message": (
                             f"Subject '{subject['subjectName']}' (Grade {subject['grade']}) "
@@ -169,19 +185,39 @@ def validate_timetable(
                     })
 
                 # ── Teacher assignment ──────────────────────────────────────────
-                # Normalise both sides to stripped strings for comparison
-                expected_teach_id = str(subject.get("assignedTeacher", "")).strip()
-                if expected_teach_id and expected_teach_id != teach_id:
-                    expected_t = teacher_lookup.get(expected_teach_id)
-                    actual_t = teacher_lookup.get(teach_id)
-                    expected_name = expected_t["fullName"] if expected_t else expected_teach_id
-                    actual_name = actual_t["fullName"] if actual_t else teach_id
-                    errors.append({
+                expected_teach_id = _normalize_id(subject.get("assignedTeacher", ""))
+                qualified_teachers: List[str] = []
+                if expected_teach_id:
+                    qualified_teachers.append(expected_teach_id)
+
+                for teacher in teachers:
+                    teacher_id = _normalize_id(teacher.get("id", ""))
+                    if not teacher_id:
+                        continue
+                    for t_subject in teacher.get("subjects", []):
+                        if _normalize_subject_name(t_subject.get("name", "")) == _normalize_subject_name(subject.get("subjectName", "")):
+                            grades = t_subject.get("grades") or []
+                            if class_grade in grades:
+                                if teacher_id not in qualified_teachers:
+                                    qualified_teachers.append(teacher_id)
+
+                if teach_id not in qualified_teachers:
+                    actual_name = teacher_lookup.get(teach_id, {}).get("fullName", teach_id)
+                    expected_name = None
+                    if expected_teach_id and expected_teach_id in teacher_lookup:
+                        expected_name = teacher_lookup[expected_teach_id]["fullName"]
+                    if expected_name:
+                        message = (
+                            f"Teacher '{actual_name}' is not qualified for '{subject['subjectName']}' in {class_name}/{day} P{p_num}. "
+                            f"Expected '{expected_name}' or another qualified teacher."
+                        )
+                    else:
+                        message = (
+                            f"Teacher '{actual_name}' is not qualified for '{subject['subjectName']}' in {class_name}/{day} P{p_num}."
+                        )
+                    hard_errors.append({
                         "type": "invalid_teacher_assignment",
-                        "message": (
-                            f"Wrong teacher for '{subject['subjectName']}' in {class_name}/{day} P{p_num}. "
-                            f"Expected '{expected_name}' but got '{actual_name}'."
-                        ),
+                        "message": message,
                         "details": {
                             "class": class_name, "day": day, "period": p_num,
                             "subjectId": sub_id,
@@ -200,13 +236,14 @@ def validate_timetable(
                 if teach_id not in slot:
                     slot[teach_id] = []
                 slot[teach_id].append(class_name)
+                teacher_weekly_load[teach_id] = teacher_weekly_load.get(teach_id, 0) + 1
 
-            # ── Missing periods for this class/day ─────────────────────────────
+            # ── Missing periods for this class/day (informational warning) ──────
             missing = [p for p in range(1, 9) if p not in seen_periods]
             if missing:
-                errors.append({
+                warnings.append({
                     "type": "missing_periods",
-                    "message": f"{class_name}/{day} is missing periods: {missing}.",
+                    "message": f"{class_name}/{day} has unassigned (blank) periods: {missing}.",
                     "details": {
                         "class": class_name, "day": day,
                         "missing_periods": missing,
@@ -220,7 +257,7 @@ def validate_timetable(
                 if len(classes) > 1:
                     teacher = teacher_lookup.get(t_id)
                     teacher_name = teacher["fullName"] if teacher else t_id
-                    errors.append({
+                    hard_errors.append({
                         "type": "teacher_clash",
                         "message": (
                             f"Teacher '{teacher_name}' is scheduled in multiple classes "
@@ -233,7 +270,7 @@ def validate_timetable(
                         },
                     })
 
-    # ── Weekly subject count check ────────────────────────────────────────────
+    # ── Weekly subject count check (informational warning) ────────────────────
     for class_name in active_classes:
         class_grade = int(class_name[:-1])
         grade_subjects = [s for s in subjects if s["grade"] == class_grade]
@@ -244,11 +281,11 @@ def validate_timetable(
             actual = subject_counts[class_name].get(sub_id, 0)
 
             if actual != expected:
-                errors.append({
+                warnings.append({
                     "type": "subject_count_mismatch",
                     "message": (
                         f"'{subject['subjectName']}' in {class_name}: "
-                        f"scheduled {actual} times but requires {expected} periods/week."
+                        f"scheduled {actual} times (requested {expected} periods/week)."
                     ),
                     "details": {
                         "class": class_name,
@@ -259,7 +296,26 @@ def validate_timetable(
                     },
                 })
 
+    # ── Weekly teacher load check ────────────────────────────────────────────
+    for teacher_id, count in teacher_weekly_load.items():
+        if count > 28:
+            teacher_name = teacher_lookup.get(teacher_id, {}).get("fullName", teacher_id)
+            hard_errors.append({
+                "type": "teacher_overload",
+                "message": (
+                    f"Teacher '{teacher_name}' is assigned {count} periods per week, "
+                    "which exceeds the 28-period limit."
+                ),
+                "details": {
+                    "teacherId": teacher_id,
+                    "teacherName": teacher_name,
+                    "scheduledPeriods": count,
+                },
+            })
+
     return {
-        "is_valid": len(errors) == 0,
-        "errors": errors,
+        "is_valid": len(hard_errors) == 0,
+        "errors": hard_errors + warnings,
+        "hard_errors": hard_errors,
+        "warnings": warnings,
     }

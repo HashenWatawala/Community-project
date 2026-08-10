@@ -9,6 +9,8 @@ class PeriodEntry(BaseModel):
     period: int = Field(..., ge=1, le=8, description="Period number (1-8)")
     subjectId: str = Field(..., description="Subject ObjectId string")
     teacherId: str = Field(..., description="Teacher ObjectId string")
+    subjectName: Optional[str] = None
+    teacherName: Optional[str] = None
 
 
 class ClassScheduleSchema(BaseModel):

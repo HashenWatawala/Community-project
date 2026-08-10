@@ -6,6 +6,8 @@ import { API } from "../../utils/auth";
 
 const ViewTimetable = () => {
   const [selectedClass, setSelectedClass] = useState("6A");
+  const [selectedGrade, setSelectedGrade] = useState(6);
+  const [gradeMap, setGradeMap] = useState({});
   const [currentTimetable, setCurrentTimetable] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -23,6 +25,38 @@ const ViewTimetable = () => {
     } catch (err) {
       console.log(err);
       setSubjects([]);
+    }
+  };
+
+  const fetchTimetableDoc = async () => {
+    try {
+      const res = await axios.get(`${API}/api/timetable`);
+      const timetableDoc = res.data?.timetable || res.data || {};
+
+      // Build grade -> classes map from timetable keys like '6A', '7B'
+      const map = {};
+      Object.keys(timetableDoc).forEach((className) => {
+        // extract leading digits as grade
+        const match = className.match(/^(\d+)/);
+        const grade = match ? Number(match[0]) : null;
+        if (grade) {
+          map[grade] = map[grade] || [];
+          map[grade].push(className);
+        }
+      });
+
+      setGradeMap(map);
+
+      // If no selectedClass set from map, pick first available
+      if (!selectedClass) {
+        const firstGrade = Object.keys(map)[0];
+        if (firstGrade && map[firstGrade]?.length > 0) {
+          setSelectedGrade(Number(firstGrade));
+          setSelectedClass(map[firstGrade][0]);
+        }
+      }
+    } catch (err) {
+      console.log(err);
     }
   };
 
@@ -50,13 +84,18 @@ const ViewTimetable = () => {
 
   useEffect(() => {
     fetchSubjects();
+    fetchTimetableDoc();
 
     if (selectedClass) {
       fetchTimetable();
     }
   }, [selectedClass]);
 
-  const grades = ["6A", "7A", "8A", "9A", "10A", "11A"];
+  // derive available grades from gradeMap or fallback to 6-11
+  const availableGrades =
+    Object.keys(gradeMap).length > 0
+      ? Object.keys(gradeMap).map((g) => Number(g)).sort((a, b) => a - b)
+      : [6, 7, 8, 9, 10, 11];
 
   const periods = [
     {
@@ -73,23 +112,23 @@ const ViewTimetable = () => {
     },
     {
       number: 4,
-      time: "9:45 - 10:25",
+      time: "9:30 - 10:10",
     },
     {
       number: 5,
-      time: "10:25 - 11:05",
+      time: "10:10 - 10:30 (Interval)",
     },
     {
       number: 6,
-      time: "11:05 - 11:45",
+      time: "10:30 - 11:15",
     },
     {
       number: 7,
-      time: "11:45 - 12:25",
+      time: "12:00 - 12:45",
     },
     {
       number: 8,
-      time: "12:25 - 1:05",
+      time: "12:45 - 1:30",
     },
   ];
 
@@ -114,16 +153,37 @@ const ViewTimetable = () => {
               <label className="font-semibold">Grade</label>
 
               <select
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                value={selectedGrade}
+                onChange={(e) => {
+                  const g = Number(e.target.value);
+                  setSelectedGrade(g);
+                  // pick first class in this grade if available
+                  const classes = gradeMap[g] || [];
+                  if (classes.length > 0) setSelectedClass(classes[0]);
+                }}
                 className="border px-4 py-2 rounded"
               >
-                {grades.map((grade) => (
+                {availableGrades.map((grade) => (
                   <option key={grade} value={grade}>
                     {grade}
                   </option>
                 ))}
               </select>
+
+              {/* class selector if multiple classes per grade */}
+              {gradeMap[selectedGrade] && (
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="border px-4 py-2 rounded"
+                >
+                  {gradeMap[selectedGrade].map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -162,10 +222,7 @@ const ViewTimetable = () => {
                       const getSubject = (day) => {
                         const dayData = currentTimetable?.[day];
 
-                        const found = dayData?.find(
-                          (item) => item.period === p.number,
-                        );
-
+                        const found = dayData?.find((item) => item.period === p.number);
                         return (
                           subjectNameById[found?.subjectId] ||
                           found?.subjectName ||
@@ -175,35 +232,30 @@ const ViewTimetable = () => {
                       };
 
                       return (
-                        <tr key={p.number}>
-                          <td className="border px-4 py-3 text-center">
-                            {p.number}
-                          </td>
+                        <React.Fragment key={p.number}>
+                          <tr>
+                            <td className="border px-4 py-3 text-center">{p.number}</td>
+                            <td className="border px-4 py-3 text-center">{p.time}</td>
+                            <td className="border px-4 py-3 text-center">{getSubject("Monday")}</td>
+                            <td className="border px-4 py-3 text-center">{getSubject("Tuesday")}</td>
+                            <td className="border px-4 py-3 text-center">{getSubject("Wednesday")}</td>
+                            <td className="border px-4 py-3 text-center">{getSubject("Thursday")}</td>
+                            <td className="border px-4 py-3 text-center">{getSubject("Friday")}</td>
+                          </tr>
 
-                          <td className="border px-4 py-3 text-center">
-                            {p.time}
-                          </td>
-
-                          <td className="border px-4 py-3 text-center">
-                            {getSubject("Monday")}
-                          </td>
-
-                          <td className="border px-4 py-3 text-center">
-                            {getSubject("Tuesday")}
-                          </td>
-
-                          <td className="border px-4 py-3 text-center">
-                            {getSubject("Wednesday")}
-                          </td>
-
-                          <td className="border px-4 py-3 text-center">
-                            {getSubject("Thursday")}
-                          </td>
-
-                          <td className="border px-4 py-3 text-center">
-                            {getSubject("Friday")}
-                          </td>
-                        </tr>
+                          {/* Insert interval row visually after period 4 */}
+                          {p.number === 4 && (
+                            <tr>
+                              <td className="border px-4 py-3 text-center">—</td>
+                              <td className="border px-4 py-3 text-center font-semibold">10:10 - 10:30 (Interval)</td>
+                              <td className="border px-4 py-3 text-center">Interval</td>
+                              <td className="border px-4 py-3 text-center">Interval</td>
+                              <td className="border px-4 py-3 text-center">Interval</td>
+                              <td className="border px-4 py-3 text-center">Interval</td>
+                              <td className="border px-4 py-3 text-center">Interval</td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
