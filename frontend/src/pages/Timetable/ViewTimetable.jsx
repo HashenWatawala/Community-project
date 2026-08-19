@@ -36,7 +36,7 @@ const normalCellContentStyle = {
 // Renders a single subject cell. If teacherAssignmentStatus is "UNASSIGNED",
 // renders an amber warning badge alongside the subject name so administrators
 // can immediately identify slots where no teacher has been assigned.
-const TimetableCell = ({ entry, subjectNameById }) => {
+const TimetableCell = ({ entry, subjectNameById, onHoverStart, onHoverMove, onHoverEnd }) => {
   if (!entry) {
     return <span style={{ color: "#9ca3af", fontSize: "0.75rem" }}>—</span>;
   }
@@ -53,7 +53,13 @@ const TimetableCell = ({ entry, subjectNameById }) => {
 
   if (isUnassigned) {
     return (
-      <span style={unassignedCellStyle} title="No teacher has been assigned to this period">
+      <span
+        style={unassignedCellStyle}
+        title="No teacher has been assigned to this period"
+        onMouseEnter={(e) => onHoverStart?.(e, entry)}
+        onMouseMove={(e) => onHoverMove?.(e, entry)}
+        onMouseLeave={() => onHoverEnd?.()}
+      >
         <span
           style={{
             fontWeight: 600,
@@ -80,7 +86,12 @@ const TimetableCell = ({ entry, subjectNameById }) => {
   }
 
   return (
-    <span style={normalCellContentStyle}>
+    <span
+      style={normalCellContentStyle}
+      onMouseEnter={(e) => onHoverStart?.(e, entry)}
+      onMouseMove={(e) => onHoverMove?.(e, entry)}
+      onMouseLeave={() => onHoverEnd?.()}
+    >
       {subjectName}
     </span>
   );
@@ -93,9 +104,11 @@ const ViewTimetable = () => {
   const [gradeMap, setGradeMap] = useState({});
   const [currentTimetable, setCurrentTimetable] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasUnassigned, setHasUnassigned] = useState(false);
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, text: "" });
 
   const subjectNameById = subjects.reduce((lookup, subject) => {
     lookup[subject.id] = subject.subjectName;
@@ -109,6 +122,16 @@ const ViewTimetable = () => {
     } catch (err) {
       console.log(err);
       setSubjects([]);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    try {
+      const res = await axios.get(`${API}/api/teachers/`);
+      setTeachers(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch teachers", err);
+      setTeachers([]);
     }
   };
 
@@ -216,12 +239,34 @@ const ViewTimetable = () => {
 
   useEffect(() => {
     fetchSubjects();
+    fetchTeachers();
     fetchTimetableDoc();
 
     if (selectedClass) {
       fetchTimetable();
     }
   }, [selectedClass]);
+
+  const teacherNameById = teachers.reduce((lookup, t) => {
+    if (t && t.id) lookup[t.id] = t.fullName || t.id;
+    return lookup;
+  }, {});
+
+  const handleHoverStart = (e, entry) => {
+    if (!entry || !entry.subjectId) return;
+    const teacherId = entry.teacherId;
+    if (!teacherId) return; // don't show tooltip for unassigned
+    const name = teacherNameById[teacherId] || teacherId;
+    setTooltip({ visible: true, x: e.clientX + 12, y: e.clientY + 12, text: name });
+  };
+
+  const handleHoverMove = (e) => {
+    setTooltip((prev) => (prev.visible ? { ...prev, x: e.clientX + 12, y: e.clientY + 12 } : prev));
+  };
+
+  const handleHoverEnd = () => {
+    setTooltip({ visible: false, x: 0, y: 0, text: "" });
+  };
 
   // derive available grades from gradeMap or fallback to 6-11
   const availableGrades =
@@ -436,6 +481,9 @@ const ViewTimetable = () => {
                                     <TimetableCell
                                       entry={entry}
                                       subjectNameById={subjectNameById}
+                                      onHoverStart={handleHoverStart}
+                                      onHoverMove={handleHoverMove}
+                                      onHoverEnd={handleHoverEnd}
                                     />
                                   </td>
                                 );
@@ -551,6 +599,29 @@ const ViewTimetable = () => {
           )}
         </main>
       </div>
+      {/* Tooltip popup (follows cursor) */}
+      {tooltip.visible && (
+        <div
+          role="tooltip"
+          aria-hidden={!tooltip.visible}
+          style={{
+            position: "fixed",
+            left: tooltip.x,
+            top: tooltip.y,
+            zIndex: 2000,
+            background: "rgba(0,0,0,0.85)",
+            color: "white",
+            padding: "6px 8px",
+            borderRadius: 6,
+            fontSize: "0.85rem",
+            pointerEvents: "none",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 };
