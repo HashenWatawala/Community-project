@@ -1,0 +1,152 @@
+{
+  "_comment": [
+    "Teacher seed data for the Community School Timetable System.",
+    "Covers 5 subjects (Mathematics, Science, English, History, Art) across grades 6-11.",
+    "2 primary teachers per subject (3 grades each, 24 ppw max — under 28 limit).",
+    "3 backup teachers with dual-subject qualifications for full-grade coverage.",
+    "Total: 13 new teachers. Combined with existing records = full coverage.",
+    "",
+    "Weekly load analysis (primary teachers):",
+    "  3 grades x 8 periods/week = 24 periods/week  (limit: 28)",
+    "  Safe headroom: 4 periods for backup duties.",
+    "",
+    "To import: run  python seed_teachers.py  from the backend directory.",
+    "To replace all existing teachers first: python seed_teachers.py --replace-all"
+  ],
+  "teachers": [
+    {
+      "fullName": "Mr. Kasun Jayawardena",
+      "email": "kasun.jayawardena@school.lk",
+      "nicNo": "197501001V",
+      "contactNumber": "+94771000001",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Mathematics", "grades": [6, 7, 8] }
+      ]
+    },
+    {
+      "fullName": "Ms. Nadeesha Mendis",
+      "email": "nadeesha.mendis@school.lk",
+      "nicNo": "198201001V",
+      "contactNumber": "+94771000002",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Mathematics", "grades": [9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Mr. Chamara Gunasekara",
+      "email": "chamara.gunasekara@school.lk",
+      "nicNo": "198001001V",
+      "contactNumber": "+94771000003",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Science", "grades": [6, 7, 8] }
+      ]
+    },
+    {
+      "fullName": "Ms. Ishani Rathnayake",
+      "email": "ishani.rathnayake@school.lk",
+      "nicNo": "199001001V",
+      "contactNumber": "+94771000004",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Science", "grades": [9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Ms. Priyanka Bandara",
+      "email": "priyanka.bandara@school.lk",
+      "nicNo": "198501001V",
+      "contactNumber": "+94771000005",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "English", "grades": [6, 7, 8] }
+      ]
+    },
+    {
+      "fullName": "Mr. Ruwan Wickramasinghe",
+      "email": "ruwan.wickramasinghe@school.lk",
+      "nicNo": "197801001V",
+      "contactNumber": "+94771000006",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "English", "grades": [9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Ms. Thilini Dissanayake",
+      "email": "thilini.dissanayake@school.lk",
+      "nicNo": "198801001V",
+      "contactNumber": "+94771000007",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "History", "grades": [6, 7, 8] }
+      ]
+    },
+    {
+      "fullName": "Mr. Sanjeewa Karunaratne",
+      "email": "sanjeewa.karunaratne@school.lk",
+      "nicNo": "197201001V",
+      "contactNumber": "+94771000008",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "History", "grades": [9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Ms. Dulanjali Perera",
+      "email": "dulanjali.perera@school.lk",
+      "nicNo": "199201001V",
+      "contactNumber": "+94771000009",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Art", "grades": [6, 7, 8] }
+      ]
+    },
+    {
+      "fullName": "Mr. Buddhika Samarasinghe",
+      "email": "buddhika.samarasinghe@school.lk",
+      "nicNo": "198601001V",
+      "contactNumber": "+94771000010",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Art", "grades": [9, 10, 11] }
+      ]
+    },
+    {
+      "_comment": "Backup teachers — qualify for all grades to prevent UNASSIGNED when primaries are at load limit",
+      "fullName": "Ms. Anusha Wijeratne",
+      "email": "anusha.wijeratne@school.lk",
+      "nicNo": "197001001V",
+      "contactNumber": "+94771000011",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Mathematics", "grades": [6, 7, 8, 9, 10, 11] },
+        { "name": "Science",     "grades": [6, 7, 8, 9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Mr. Prasanna Senanayake",
+      "email": "prasanna.senanayake@school.lk",
+      "nicNo": "197601001V",
+      "contactNumber": "+94771000012",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "English", "grades": [6, 7, 8, 9, 10, 11] },
+        { "name": "History", "grades": [6, 7, 8, 9, 10, 11] }
+      ]
+    },
+    {
+      "fullName": "Ms. Kumari Pathirana",
+      "email": "kumari.pathirana@school.lk",
+      "nicNo": "198901001V",
+      "contactNumber": "+94771000013",
+      "hasAssignClass": true,
+      "subjects": [
+        { "name": "Art",     "grades": [6, 7, 8, 9, 10, 11] },
+        { "name": "Science", "grades": [6, 7, 8, 9, 10, 11] }
+      ]
+    }
+  ]
+}

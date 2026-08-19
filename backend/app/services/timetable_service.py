@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 
@@ -18,7 +18,7 @@ from app.services.timetable_validator import validate_timetable
 logger = logging.getLogger("uvicorn.error")
 
 # Max retries if AI output fails validation
-_MAX_RETRIES = 3
+_MAX_RETRIES = 5
 
 
 async def generate_and_save_timetable() -> Dict[str, Any]:
@@ -26,8 +26,11 @@ async def generate_and_save_timetable() -> Dict[str, Any]:
     Full orchestration pipeline:
     1. Reject if a timetable already exists (HTTP 409).
     2. Pre-load teacher & subject data for validation.
-    3. Call Gemini AI (retries up to _MAX_RETRIES on validation failure).
-    4. Save and return the validated timetable.
+    3. Call the deterministic solver / Gemini AI fallback.
+    4. Validate — retrying on hard errors only.
+       A timetable that has ONLY "unassigned_teacher" warnings (no hard errors)
+       is accepted and saved immediately without retrying.
+    5. Save and return the validated timetable along with any unassigned diagnostics.
     """
     # ── Guard: one timetable at a time ───────────────────────────────────────
     existing = await get_timetable_doc()
@@ -62,8 +65,10 @@ async def generate_and_save_timetable() -> Dict[str, Any]:
         logger.info("Timetable generation attempt %d / %d …", attempt, _MAX_RETRIES)
 
         try:
-            raw_timetable = await generate_timetable_from_ai(teachers, subjects)
+            result = await generate_timetable_from_ai(teachers, subjects)
         except ValueError as exc:
+            # ValueError contains diagnostic info (pre-flight failures, solver
+            # exhaustion details).  Surface it directly so the user can act.
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
@@ -72,20 +77,55 @@ async def generate_and_save_timetable() -> Dict[str, Any]:
             logger.exception("Unexpected error during timetable generation attempt %d", attempt)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Gemini AI error: {exc}",
+                detail=f"Timetable generation error: {exc}",
             )
 
+        # ── Unpack result envelope ────────────────────────────────────────────
+        # The solver returns {"timetable": {...}, "unassigned_diagnostics": [...]}
+        # The Gemini fallback returns the same envelope shape.
+        # Legacy callers that return a bare dict are also handled here.
+        if isinstance(result, dict) and "timetable" in result:
+            raw_timetable = result["timetable"]
+            unassigned_diagnostics: List[Dict[str, Any]] = result.get("unassigned_diagnostics", [])
+        else:
+            # Bare timetable dict (legacy / unexpected shape)
+            raw_timetable = result
+            unassigned_diagnostics = []
+
         # ── Validate ──────────────────────────────────────────────────────────
-        val = validate_timetable(raw_timetable, subjects, teachers)
+        # Pass the timetable dict to the validator (it also understands the envelope).
+        val = validate_timetable(result, subjects, teachers)
+
         if val["is_valid"]:
             logger.info("Timetable passed validation on attempt %d.", attempt)
-            return await save_timetable_doc(raw_timetable)
+            saved = await save_timetable_doc(raw_timetable)
 
+            # Include unassigned diagnostics in the response so the frontend /
+            # API consumers can surface them to administrators.
+            response = dict(saved)
+            if unassigned_diagnostics:
+                response["unassigned_diagnostics"] = unassigned_diagnostics
+                response["has_unassigned_teachers"] = True
+                logger.warning(
+                    "Saved timetable has %d slot(s) with no teacher assigned.",
+                    len(unassigned_diagnostics),
+                )
+            else:
+                response["unassigned_diagnostics"] = []
+                response["has_unassigned_teachers"] = False
+
+            return response
+
+        # ── Only hard errors trigger a retry ──────────────────────────────────
+        # Timetables with ONLY "unassigned_teacher" warnings (and no hard errors)
+        # are accepted above (val["is_valid"] will be True in that case).
+        # We only reach here when there are genuine hard errors.
         last_errors = val["errors"]
+        hard_error_count = len(val["hard_errors"])
         logger.warning(
-            "Attempt %d: validation failed with %d error(s). %s",
+            "Attempt %d: validation failed with %d hard error(s). %s",
             attempt,
-            len(last_errors),
+            hard_error_count,
             "Retrying…" if attempt < _MAX_RETRIES else "No retries left.",
         )
 
@@ -116,6 +156,7 @@ async def remove_active_timetable() -> bool:
 async def get_teacher_timetable(teacher_id: str) -> Optional[Dict[str, Any]]:
     """
     Dynamically builds a teacher's schedule from the stored class timetables.
+    Only includes periods where this teacher is explicitly assigned (skips UNASSIGNED slots).
     """
     doc = await get_timetable_doc()
     if not doc:
@@ -128,6 +169,7 @@ async def get_teacher_timetable(teacher_id: str) -> Optional[Dict[str, Any]]:
     for class_name, days_schedule in doc.get("timetable", {}).items():
         for day in days:
             for entry in days_schedule.get(day, []):
+                # Only include entries where this teacher is actually assigned
                 if str(entry.get("teacherId", "")).strip() == norm_id:
                     schedule[day].append({
                         "period": entry["period"],

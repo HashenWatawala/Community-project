@@ -1,383 +1,627 @@
-import React, { useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
+import axios from "axios";
+import React, { useState, useEffect } from "react";
+import { API } from "../../utils/auth";
 
+// ── Inline styles for teacher-unassigned warning cells ───────────────────────
+const unassignedCellStyle = {
+  background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+  border: "2px solid #f59e0b",
+  borderRadius: "6px",
+  padding: "6px 8px",
+  display: "inline-block",
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+const unassignedBadgeStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "3px",
+  marginTop: "3px",
+  color: "#92400e",
+  fontSize: "0.68rem",
+  fontWeight: 600,
+  lineHeight: 1.2,
+};
+
+const normalCellContentStyle = {
+  display: "inline-block",
+  width: "100%",
+  padding: "2px 0",
+};
+
+// ── TimetableCell ────────────────────────────────────────────────────────────
+// Renders a single subject cell. If teacherAssignmentStatus is "UNASSIGNED",
+// renders an amber warning badge alongside the subject name so administrators
+// can immediately identify slots where no teacher has been assigned.
+const TimetableCell = ({ entry, subjectNameById, onHoverStart, onHoverMove, onHoverEnd }) => {
+  if (!entry) {
+    return <span style={{ color: "#9ca3af", fontSize: "0.75rem" }}>—</span>;
+  }
+
+  const subjectName =
+    subjectNameById[entry.subjectId] ||
+    entry.subjectName ||
+    entry.subjectId ||
+    "Unknown Subject";
+
+  const isUnassigned =
+    entry.teacherAssignmentStatus === "UNASSIGNED" ||
+    (entry.teacherId === null && !entry.teacherId);
+
+  if (isUnassigned) {
+    return (
+      <span
+        style={unassignedCellStyle}
+        title="No teacher has been assigned to this period"
+        onMouseEnter={(e) => onHoverStart?.(e, entry)}
+        onMouseMove={(e) => onHoverMove?.(e, entry)}
+        onMouseLeave={() => onHoverEnd?.()}
+      >
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: "0.82rem",
+            color: "#92400e",
+            display: "block",
+            lineHeight: 1.3,
+          }}
+        >
+          {subjectName}
+        </span>
+        <span style={unassignedBadgeStyle}>
+          <span
+            role="img"
+            aria-label="warning"
+            style={{ fontSize: "0.75rem", flexShrink: 0 }}
+          >
+            ⚠
+          </span>
+          Teacher Not Assigned
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      style={normalCellContentStyle}
+      onMouseEnter={(e) => onHoverStart?.(e, entry)}
+      onMouseMove={(e) => onHoverMove?.(e, entry)}
+      onMouseLeave={() => onHoverEnd?.()}
+    >
+      {subjectName}
+    </span>
+  );
+};
+
+// ── ViewTimetable ────────────────────────────────────────────────────────────
 const ViewTimetable = () => {
-  const [selectedGrade, setSelectedGrade] = useState("Grade 10");
-  const [selectedTeacher, setSelectedTeacher] = useState("");
+  const [selectedClass, setSelectedClass] = useState("6A");
+  const [selectedGrade, setSelectedGrade] = useState(6);
+  const [gradeMap, setGradeMap] = useState({});
+  const [currentTimetable, setCurrentTimetable] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hasUnassigned, setHasUnassigned] = useState(false);
+  const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, text: "" });
 
-  const grades = [
-    "Grade 6",
-    "Grade 7",
-    "Grade 8",
-    "Grade 9",
-    "Grade 10",
-    "Grade 11",
-  ];
+  const subjectNameById = subjects.reduce((lookup, subject) => {
+    lookup[subject.id] = subject.subjectName;
+    return lookup;
+  }, {});
 
-  const teachers = [
-    "A.P Gunadasa",
-    "M.N.F",
-    "A.S.T",
-    "M.M",
-    "S.V",
-    "J.A.D.H",
-    "M.R.P",
-    "H.A.S",
-  ];
-
-  const timetableData = {
-    "Grade 10": {
-      name: "Grade 10",
-      data: [
-        {
-          period: 1,
-          time: "7.45 - 8.25",
-          monday: "English(M.N.F)",
-          tuesday: "English(M.N.F)",
-          wednesday: "English(M.N.F)",
-          thursday: "English(M.N.F)",
-          friday: "English(M.N.F)",
-        },
-        {
-          period: "Break",
-          time: "8.25 - 8.30",
-          tuesday: "Register Marking Time",
-          monday: "Register Marking Time",
-          wednesday: "Register Marking Time",
-          thursday: "Register Marking Time",
-          friday: "Register Marking Time",
-          isBreak: true,
-        },
-        {
-          period: 2,
-          time: "8.30 - 9.10",
-          monday: "Sinhala(M.R.P)",
-          tuesday: "Science(A.S.T)",
-          wednesday: "Science(A.S.T)",
-          thursday: "Maths(A.P.)",
-          friday: "C.T.E (S.V)",
-        },
-        {
-          period: 3,
-          time: "9.10 - 9.50",
-          monday: "C.T.E (S.V)",
-          tuesday: "Art/Dancing(J.A.D.H.)",
-          wednesday: "Sinhala (M.R.P)",
-          thursday: "Science(A.S.T)",
-          friday: "Science(A.S.T)",
-        },
-        {
-          period: 4,
-          time: "9.50 - 10.50",
-          monday: "C.T.E (S.V)",
-          tuesday: "Art/Dancing(J.A.D.H.)",
-          wednesday: "Health Science(H.A.S)",
-          thursday: "Religion (M.M)",
-          friday: "Science(A.S.T)",
-        },
-        {
-          period: "Interval",
-          time: "10.30 - 10.50",
-          monday: "Interval",
-          tuesday: "Interval",
-          wednesday: "Interval",
-          thursday: "Interval",
-          friday: "Interval",
-          isBreak: true,
-        },
-        {
-          period: 5,
-          time: "10.50 - 11.30",
-          monday: "Health Science(H.A.S)",
-          tuesday: "Maths(A.P.)",
-          wednesday: "Sinhala (M.R.P)",
-          thursday: "Health Science(H.A.S)",
-          friday: "Health Science(H.A.S)",
-        },
-        {
-          period: 6,
-          time: "11.30 - 12.10",
-          monday: "Dancing(J.A.D.H.)",
-          tuesday: "Maths(A.P.)",
-          wednesday: "Maths(A.P.)",
-          thursday: "Maths(A.P.)",
-          friday: "Maths(A.P.)",
-        },
-        {
-          period: 7,
-          time: "12.10 - 12.50",
-          monday: "Science(A.S.T)",
-          tuesday: "Religion (M.M)",
-          wednesday: "History (S.V)",
-          thursday: "Health Science(H.A.S)",
-          friday: "Maths(A.P.)",
-        },
-        {
-          period: 8,
-          time: "12.50 - 1.30",
-          monday: "Maths(A.P.)",
-          tuesday: "Sinhala (M.R.P)",
-          wednesday: "Maths(A.P.)",
-          thursday: "Science(A.S.T)",
-          friday: "Library(M.M)",
-        },
-      ],
-    },
-    "A.P Gunadasa": {
-      name: "Mr. A.P Gunadasa",
-      data: [
-        {
-          period: 1,
-          time: "7.45 - 8.25",
-          monday: "-",
-          tuesday: "9-Maths",
-          wednesday: "9-Maths",
-          thursday: "9-Maths",
-          friday: "9-Maths",
-        },
-        {
-          period: "Break",
-          time: "8.25 - 8.30",
-          monday: "Register Making Time",
-          tuesday: "Register Making Time",
-          wednesday: "Register Making Time",
-          thursday: "Register Making Time",
-          friday: "Register Making Time",
-          isBreak: true,
-        },
-        {
-          period: 2,
-          time: "8.30 - 9.10",
-          monday: "11-Maths",
-          tuesday: "11-Maths",
-          wednesday: "7-Maths",
-          thursday: "10-Maths",
-          friday: "11-Maths",
-        },
-        {
-          period: 3,
-          time: "9.10 - 9.50",
-          monday: "9-Maths",
-          tuesday: "11-Maths",
-          wednesday: "7-Maths",
-          thursday: "11-Maths",
-          friday: "11-Maths",
-        },
-        {
-          period: 4,
-          time: "9.50 - 10.50",
-          monday: "7-Maths",
-          tuesday: "-",
-          wednesday: "-",
-          thursday: "8-Maths",
-          friday: "6-Maths",
-        },
-        {
-          period: "Interval",
-          time: "10.30 - 10.50",
-          monday: "Interval",
-          tuesday: "Interval",
-          wednesday: "Interval",
-          thursday: "Interval",
-          friday: "Interval",
-          isBreak: true,
-        },
-        {
-          period: 5,
-          time: "10.50 - 11.30",
-          monday: "8-Maths",
-          tuesday: "10-Maths",
-          wednesday: "6-Maths",
-          thursday: "-",
-          friday: "8-Maths",
-        },
-        {
-          period: 6,
-          time: "11.30 - 12.10",
-          monday: "9-Maths",
-          tuesday: "10-Maths",
-          wednesday: "10-Maths",
-          thursday: "6-Maths",
-          friday: "7-Maths",
-        },
-        {
-          period: 7,
-          time: "12.10 - 12.50",
-          monday: "-",
-          tuesday: "8-Maths",
-          wednesday: "11-Maths",
-          thursday: "7-Maths",
-          friday: "10-Maths",
-        },
-        {
-          period: 8,
-          time: "12.50 - 1.30",
-          monday: "10-Maths",
-          tuesday: "6-Maths",
-          wednesday: "10-Maths",
-          thursday: "-",
-          friday: "8-Maths",
-        },
-      ],
-    },
+  const fetchSubjects = async () => {
+    try {
+      const response = await axios.get(`${API}/api/subjects/`);
+      setSubjects(response.data || []);
+    } catch (err) {
+      console.log(err);
+      setSubjects([]);
+    }
   };
 
-  const currentTimetable = selectedTeacher
-    ? timetableData[selectedTeacher]
-    : timetableData[selectedGrade];
+  const fetchTeachers = async () => {
+    try {
+      const res = await axios.get(`${API}/api/teachers/`);
+      setTeachers(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch teachers", err);
+      setTeachers([]);
+    }
+  };
+
+  const fetchTimetableDoc = async () => {
+    try {
+      const res = await axios.get(`${API}/api/timetable`);
+      const timetableDoc = res.data?.timetable || res.data || {};
+
+      // Build grade -> classes map from timetable keys like '6A', '7B'
+      const map = {};
+      Object.keys(timetableDoc).forEach((className) => {
+        // extract leading digits as grade
+        const match = className.match(/^(\d+)/);
+        const grade = match ? Number(match[0]) : null;
+        if (grade) {
+          map[grade] = map[grade] || [];
+          map[grade].push(className);
+        }
+      });
+
+      setGradeMap(map);
+
+      // If no selectedClass set from map, pick first available
+      if (!selectedClass) {
+        const firstGrade = Object.keys(map)[0];
+        if (firstGrade && map[firstGrade]?.length > 0) {
+          setSelectedGrade(Number(firstGrade));
+          setSelectedClass(map[firstGrade][0]);
+        }
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const fetchTimetable = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await axios.get(`${API}/api/timetable`, {
+        params: {
+          className: selectedClass,
+        },
+      });
+
+      setCurrentTimetable(response.data);
+
+      // Detect unassigned teacher slots.
+      // When called with ?className=..., the API returns the class's day-by-day
+      // object directly: { Monday: [...], Tuesday: [...], ... }
+      const dayMap = response.data;
+      let foundUnassigned = false;
+      let missingPeriodError = "";
+
+      const expectedDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+      const expectedPeriods = [1, 2, 3, 4, 5, 6, 7, 8];
+
+      if (dayMap && typeof dayMap === "object") {
+        for (const day of expectedDays) {
+          const dayData = dayMap[day];
+          if (!dayData || !Array.isArray(dayData)) {
+            missingPeriodError = `Timetable data incomplete: ${day} data is missing.`;
+            break;
+          }
+          
+          const periodsPresent = dayData.map((e) => e.period);
+          for (const p of expectedPeriods) {
+            if (!periodsPresent.includes(p)) {
+              missingPeriodError = `Timetable data incomplete: ${day} Period ${p} is missing.`;
+              break;
+            }
+          }
+          if (missingPeriodError) break;
+        }
+
+        if (missingPeriodError) {
+          throw new Error(missingPeriodError);
+        }
+
+        Object.values(dayMap).forEach((dayPeriods) => {
+          if (Array.isArray(dayPeriods)) {
+            dayPeriods.forEach((entry) => {
+              if (
+                entry?.teacherAssignmentStatus === "UNASSIGNED" ||
+                (entry?.teacherId === null && entry?.subjectId)
+              ) {
+                foundUnassigned = true;
+              }
+            });
+          }
+        });
+      }
+      setHasUnassigned(foundUnassigned);
+    } catch (error) {
+      console.log(error);
+
+      setError(error.message && error.message.includes("Timetable data incomplete") ? error.message : "No timetable found.");
+      setCurrentTimetable(null);
+      setHasUnassigned(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubjects();
+    fetchTeachers();
+    fetchTimetableDoc();
+
+    if (selectedClass) {
+      fetchTimetable();
+    }
+  }, [selectedClass]);
+
+  const teacherNameById = teachers.reduce((lookup, t) => {
+    if (t && t.id) lookup[t.id] = t.fullName || t.id;
+    return lookup;
+  }, {});
+
+  const handleHoverStart = (e, entry) => {
+    if (!entry || !entry.subjectId) return;
+    const teacherId = entry.teacherId;
+    if (!teacherId) return; // don't show tooltip for unassigned
+    const name = teacherNameById[teacherId] || teacherId;
+    setTooltip({ visible: true, x: e.clientX + 12, y: e.clientY + 12, text: name });
+  };
+
+  const handleHoverMove = (e) => {
+    setTooltip((prev) => (prev.visible ? { ...prev, x: e.clientX + 12, y: e.clientY + 12 } : prev));
+  };
+
+  const handleHoverEnd = () => {
+    setTooltip({ visible: false, x: 0, y: 0, text: "" });
+  };
+
+  // derive available grades from gradeMap or fallback to 6-11
+  const availableGrades =
+    Object.keys(gradeMap).length > 0
+      ? Object.keys(gradeMap).map((g) => Number(g)).sort((a, b) => a - b)
+      : [6, 7, 8, 9, 10, 11];
+
+  const periods = [
+    {
+      number: 1,
+      time: "7:30 - 8:10",
+    },
+    {
+      number: 2,
+      time: "8:10 - 8:50",
+    },
+    {
+      number: 3,
+      time: "8:50 - 9:30",
+    },
+    {
+      number: 4,
+      time: "9:30 - 10:10",
+    },
+    {
+      number: 5,
+      time: "10:30 - 11:15",
+    },
+    {
+      number: 6,
+      time: "11:15 - 12:00",
+    },
+    {
+      number: 7,
+      time: "12:00 - 12:45",
+    },
+    {
+      number: 8,
+      time: "12:45 - 01:30",
+    },
+  ];
+
+  // ── Helper: get the full period entry object for a given day+period number ──
+  // When ?className=... is passed, the API returns the class day-by-day object
+  // directly: { Monday: [...], Tuesday: [...], ... }
+  // So currentTimetable IS the class schedule — no extra unwrapping needed.
+  const getPeriodEntry = (timetable, day, periodNumber) => {
+    if (!timetable || typeof timetable !== "object") return null;
+    const dayData = timetable[day];
+    if (!Array.isArray(dayData)) return null;
+    return dayData.find((item) => item.period === periodNumber) || null;
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Top navbar */}
       <header>
         <Navbar />
       </header>
 
       <div className="flex">
-        {/* Sidebar (left) */}
         <aside className="hidden md:block">
           <Sidebar />
         </aside>
 
-        {/* Main content */}
         <main className="flex-1 p-6">
           <h3 className="text-2xl font-semibold mb-6 text-gray-800">
             View Timetable
           </h3>
 
-          {/* Filter Section */}
-          <div className="bg-white rounded-xl shadow-md p-6 mb-6 border border-gray-200">
-            <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="grade-select"
-                  className="text-gray-700 font-semibold text-base whitespace-nowrap"
-                >
-                  Grade
-                </label>
-                <select
-                  id="grade-select"
-                  className="block px-4 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium cursor-pointer hover:border-gray-400 transition"
-                  value={selectedGrade}
-                  onChange={(e) => {
-                    setSelectedGrade(e.target.value);
-                    setSelectedTeacher("");
-                  }}
-                >
-                  {grades.map((grade) => (
-                    <option key={grade} value={grade}>
-                      {grade}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+            <div className="flex items-center gap-4">
+              <label className="font-semibold">Grade</label>
 
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="teacher-select"
-                  className="text-gray-700 font-semibold text-base whitespace-nowrap"
-                >
-                  Teacher
-                </label>
+              <select
+                value={selectedGrade}
+                onChange={(e) => {
+                  const g = Number(e.target.value);
+                  setSelectedGrade(g);
+                  // pick first class in this grade if available
+                  const classes = gradeMap[g] || [];
+                  if (classes.length > 0) setSelectedClass(classes[0]);
+                }}
+                className="border px-4 py-2 rounded"
+              >
+                {availableGrades.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}
+                  </option>
+                ))}
+              </select>
+
+              {/* class selector if multiple classes per grade */}
+              {gradeMap[selectedGrade] && (
                 <select
-                  id="teacher-select"
-                  className="block px-4 py-2 border-2 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium cursor-pointer hover:border-gray-400 transition"
-                  value={selectedTeacher}
-                  onChange={(e) => {
-                    setSelectedTeacher(e.target.value);
-                    setSelectedGrade("");
-                  }}
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="border px-4 py-2 rounded"
                 >
-                  <option value="">Select Teacher</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher} value={teacher}>
-                      {teacher}
+                  {gradeMap[selectedGrade].map((cls) => (
+                    <option key={cls} value={cls}>
+                      {cls}
                     </option>
                   ))}
                 </select>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Timetable Section */}
+          {loading && <p>Loading timetable...</p>}
+
+          {error && <p className="text-red-500">{error}</p>}
+
+          {/* ── Unassigned teacher warning banner ───────────────────────────── */}
+          {currentTimetable && hasUnassigned && (
+            <div
+              style={{
+                background: "#fffbeb",
+                border: "1.5px solid #f59e0b",
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "10px",
+              }}
+            >
+              <span style={{ fontSize: "1.1rem", marginTop: "1px" }}>⚠️</span>
+              <div>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: "#92400e",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  Some periods have no teacher assigned.
+                </span>
+                <span
+                  style={{
+                    color: "#78350f",
+                    fontSize: "0.85rem",
+                    marginLeft: "6px",
+                  }}
+                >
+                  These slots are highlighted in amber below. Subjects are
+                  scheduled but require a teacher to be assigned manually.
+                </span>
+              </div>
+            </div>
+          )}
+
           {currentTimetable && (
-            <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
-              <h4 className="text-lg font-semibold mb-6 text-gray-800 text-center">
-                Time Table -2024
-                <br />
-                {currentTimetable.name}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h4 className="text-lg font-semibold text-center mb-5">
+                Timetable - {selectedClass}
               </h4>
 
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-400">
+                <table className="min-w-full border border-gray-400">
                   <thead>
-                    <tr className="bg-white border-b-2 border-gray-400">
-                      <th className="border border-gray-400 px-4 py-3 text-left text-sm font-bold text-gray-900">
-                        No. of Period
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-left text-sm font-bold text-gray-900">
-                        Time
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                        Monday
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                        Tuesday
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                        Wednesday
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                        Thursday
-                      </th>
-                      <th className="border border-gray-400 px-4 py-3 text-center text-sm font-bold text-gray-900">
-                        Friday
-                      </th>
+                    <tr>
+                      <th className="border px-4 py-3">Period</th>
+
+                      <th className="border px-4 py-3">Time</th>
+
+                      <th className="border px-4 py-3">Monday</th>
+
+                      <th className="border px-4 py-3">Tuesday</th>
+
+                      <th className="border px-4 py-3">Wednesday</th>
+
+                      <th className="border px-4 py-3">Thursday</th>
+
+                      <th className="border px-4 py-3">Friday</th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {currentTimetable.data.map((row, idx) => (
-                      <tr
-                        key={idx}
-                        className={`${
-                          row.isBreak
-                            ? "bg-gray-100"
-                            : idx % 2 === 0
-                            ? "bg-white"
-                            : "bg-gray-50"
-                        } hover:bg-gray-100 transition`}
-                      >
-                        <td className="border border-gray-400 px-4 py-3 text-sm font-semibold text-gray-900">
-                          {row.period}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700">
-                          {row.time}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.monday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.tuesday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.wednesday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.thursday}
-                        </td>
-                        <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700 text-center">
-                          {row.friday}
-                        </td>
-                      </tr>
-                    ))}
+                    {periods.map((p) => {
+                      return (
+                        <React.Fragment key={p.number}>
+                          <tr>
+                            <td className="border px-4 py-3 text-center">
+                              {p.number}
+                            </td>
+                            <td className="border px-4 py-3 text-center">
+                              {p.time}
+                            </td>
+                            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(
+                              (day) => {
+                                const entry = getPeriodEntry(
+                                  currentTimetable,
+                                  day,
+                                  p.number
+                                );
+                                return (
+                                  <td
+                                    key={day}
+                                    className="border px-3 py-2 text-center"
+                                    style={
+                                      entry?.teacherAssignmentStatus ===
+                                        "UNASSIGNED" ||
+                                      (entry?.teacherId === null &&
+                                        entry?.subjectId)
+                                        ? {
+                                            background:
+                                              "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                                          }
+                                        : {}
+                                    }
+                                  >
+                                    <TimetableCell
+                                      entry={entry}
+                                      subjectNameById={subjectNameById}
+                                      onHoverStart={handleHoverStart}
+                                      onHoverMove={handleHoverMove}
+                                      onHoverEnd={handleHoverEnd}
+                                    />
+                                  </td>
+                                );
+                              }
+                            )}
+                          </tr>
+
+                          {/* Insert interval row visually after period 4 */}
+                          {p.number === 4 && (
+                            <tr style={{ background: "#f0fdf4" }}>
+                              <td className="border px-4 py-3 text-center">
+                                —
+                              </td>
+                              <td className="border px-4 py-3 text-center font-semibold">
+                                10:10 - 10:30
+                              </td>
+                              {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(
+                                (day) => (
+                                  <td
+                                    key={day}
+                                    className="border px-4 py-3 text-center font-semibold text-green-700"
+                                  >
+                                    Interval
+                                  </td>
+                                )
+                              )}
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
+              </div>
+
+              {/* ── Legend ──────────────────────────────────────────────────── */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "24px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#374151",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background: "white",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  Normal period
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#92400e",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background:
+                        "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                      border: "2px solid #f59e0b",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  ⚠ Teacher Not Assigned — subject is scheduled, teacher must
+                  be assigned manually
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#065f46",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background: "#f0fdf4",
+                      border: "1px solid #6ee7b7",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  Interval break
+                </div>
               </div>
             </div>
           )}
         </main>
       </div>
+      {/* Tooltip popup (follows cursor) */}
+      {tooltip.visible && (
+        <div
+          role="tooltip"
+          aria-hidden={!tooltip.visible}
+          style={{
+            position: "fixed",
+            left: tooltip.x,
+            top: tooltip.y,
+            zIndex: 2000,
+            background: "rgba(0,0,0,0.85)",
+            color: "white",
+            padding: "6px 8px",
+            borderRadius: 6,
+            fontSize: "0.85rem",
+            pointerEvents: "none",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 };
