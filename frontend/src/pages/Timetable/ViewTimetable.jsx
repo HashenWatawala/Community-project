@@ -4,6 +4,89 @@ import axios from "axios";
 import React, { useState, useEffect } from "react";
 import { API } from "../../utils/auth";
 
+// ── Inline styles for teacher-unassigned warning cells ───────────────────────
+const unassignedCellStyle = {
+  background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+  border: "2px solid #f59e0b",
+  borderRadius: "6px",
+  padding: "6px 8px",
+  display: "inline-block",
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+const unassignedBadgeStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "3px",
+  marginTop: "3px",
+  color: "#92400e",
+  fontSize: "0.68rem",
+  fontWeight: 600,
+  lineHeight: 1.2,
+};
+
+const normalCellContentStyle = {
+  display: "inline-block",
+  width: "100%",
+  padding: "2px 0",
+};
+
+// ── TimetableCell ────────────────────────────────────────────────────────────
+// Renders a single subject cell. If teacherAssignmentStatus is "UNASSIGNED",
+// renders an amber warning badge alongside the subject name so administrators
+// can immediately identify slots where no teacher has been assigned.
+const TimetableCell = ({ entry, subjectNameById }) => {
+  if (!entry) {
+    return <span style={{ color: "#9ca3af", fontSize: "0.75rem" }}>—</span>;
+  }
+
+  const subjectName =
+    subjectNameById[entry.subjectId] ||
+    entry.subjectName ||
+    entry.subjectId ||
+    "Unknown Subject";
+
+  const isUnassigned =
+    entry.teacherAssignmentStatus === "UNASSIGNED" ||
+    (entry.teacherId === null && !entry.teacherId);
+
+  if (isUnassigned) {
+    return (
+      <span style={unassignedCellStyle} title="No teacher has been assigned to this period">
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: "0.82rem",
+            color: "#92400e",
+            display: "block",
+            lineHeight: 1.3,
+          }}
+        >
+          {subjectName}
+        </span>
+        <span style={unassignedBadgeStyle}>
+          <span
+            role="img"
+            aria-label="warning"
+            style={{ fontSize: "0.75rem", flexShrink: 0 }}
+          >
+            ⚠
+          </span>
+          Teacher Not Assigned
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span style={normalCellContentStyle}>
+      {subjectName}
+    </span>
+  );
+};
+
+// ── ViewTimetable ────────────────────────────────────────────────────────────
 const ViewTimetable = () => {
   const [selectedClass, setSelectedClass] = useState("6A");
   const [selectedGrade, setSelectedGrade] = useState(6);
@@ -12,6 +95,7 @@ const ViewTimetable = () => {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [hasUnassigned, setHasUnassigned] = useState(false);
 
   const subjectNameById = subjects.reduce((lookup, subject) => {
     lookup[subject.id] = subject.subjectName;
@@ -72,11 +156,59 @@ const ViewTimetable = () => {
       });
 
       setCurrentTimetable(response.data);
+
+      // Detect unassigned teacher slots.
+      // When called with ?className=..., the API returns the class's day-by-day
+      // object directly: { Monday: [...], Tuesday: [...], ... }
+      const dayMap = response.data;
+      let foundUnassigned = false;
+      let missingPeriodError = "";
+
+      const expectedDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+      const expectedPeriods = [1, 2, 3, 4, 5, 6, 7, 8];
+
+      if (dayMap && typeof dayMap === "object") {
+        for (const day of expectedDays) {
+          const dayData = dayMap[day];
+          if (!dayData || !Array.isArray(dayData)) {
+            missingPeriodError = `Timetable data incomplete: ${day} data is missing.`;
+            break;
+          }
+          
+          const periodsPresent = dayData.map((e) => e.period);
+          for (const p of expectedPeriods) {
+            if (!periodsPresent.includes(p)) {
+              missingPeriodError = `Timetable data incomplete: ${day} Period ${p} is missing.`;
+              break;
+            }
+          }
+          if (missingPeriodError) break;
+        }
+
+        if (missingPeriodError) {
+          throw new Error(missingPeriodError);
+        }
+
+        Object.values(dayMap).forEach((dayPeriods) => {
+          if (Array.isArray(dayPeriods)) {
+            dayPeriods.forEach((entry) => {
+              if (
+                entry?.teacherAssignmentStatus === "UNASSIGNED" ||
+                (entry?.teacherId === null && entry?.subjectId)
+              ) {
+                foundUnassigned = true;
+              }
+            });
+          }
+        });
+      }
+      setHasUnassigned(foundUnassigned);
     } catch (error) {
       console.log(error);
 
-      setError("No timetable found.");
+      setError(error.message && error.message.includes("Timetable data incomplete") ? error.message : "No timetable found.");
       setCurrentTimetable(null);
+      setHasUnassigned(false);
     } finally {
       setLoading(false);
     }
@@ -116,11 +248,11 @@ const ViewTimetable = () => {
     },
     {
       number: 5,
-      time: "10:10 - 10:30 (Interval)",
+      time: "10:30 - 11:15",
     },
     {
       number: 6,
-      time: "10:30 - 11:15",
+      time: "11:15 - 12:00",
     },
     {
       number: 7,
@@ -128,9 +260,20 @@ const ViewTimetable = () => {
     },
     {
       number: 8,
-      time: "12:45 - 1:30",
+      time: "12:45 - 01:30",
     },
   ];
+
+  // ── Helper: get the full period entry object for a given day+period number ──
+  // When ?className=... is passed, the API returns the class day-by-day object
+  // directly: { Monday: [...], Tuesday: [...], ... }
+  // So currentTimetable IS the class schedule — no extra unwrapping needed.
+  const getPeriodEntry = (timetable, day, periodNumber) => {
+    if (!timetable || typeof timetable !== "object") return null;
+    const dayData = timetable[day];
+    if (!Array.isArray(dayData)) return null;
+    return dayData.find((item) => item.period === periodNumber) || null;
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -191,6 +334,45 @@ const ViewTimetable = () => {
 
           {error && <p className="text-red-500">{error}</p>}
 
+          {/* ── Unassigned teacher warning banner ───────────────────────────── */}
+          {currentTimetable && hasUnassigned && (
+            <div
+              style={{
+                background: "#fffbeb",
+                border: "1.5px solid #f59e0b",
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "10px",
+              }}
+            >
+              <span style={{ fontSize: "1.1rem", marginTop: "1px" }}>⚠️</span>
+              <div>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: "#92400e",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  Some periods have no teacher assigned.
+                </span>
+                <span
+                  style={{
+                    color: "#78350f",
+                    fontSize: "0.85rem",
+                    marginLeft: "6px",
+                  }}
+                >
+                  These slots are highlighted in amber below. Subjects are
+                  scheduled but require a teacher to be assigned manually.
+                </span>
+              </div>
+            </div>
+          )}
+
           {currentTimetable && (
             <div className="bg-white rounded-xl shadow-md p-6">
               <h4 className="text-lg font-semibold text-center mb-5">
@@ -219,40 +401,67 @@ const ViewTimetable = () => {
 
                   <tbody>
                     {periods.map((p) => {
-                      const getSubject = (day) => {
-                        const dayData = currentTimetable?.[day];
-
-                        const found = dayData?.find((item) => item.period === p.number);
-                        return (
-                          subjectNameById[found?.subjectId] ||
-                          found?.subjectName ||
-                          found?.subjectId ||
-                          ""
-                        );
-                      };
-
                       return (
                         <React.Fragment key={p.number}>
                           <tr>
-                            <td className="border px-4 py-3 text-center">{p.number}</td>
-                            <td className="border px-4 py-3 text-center">{p.time}</td>
-                            <td className="border px-4 py-3 text-center">{getSubject("Monday")}</td>
-                            <td className="border px-4 py-3 text-center">{getSubject("Tuesday")}</td>
-                            <td className="border px-4 py-3 text-center">{getSubject("Wednesday")}</td>
-                            <td className="border px-4 py-3 text-center">{getSubject("Thursday")}</td>
-                            <td className="border px-4 py-3 text-center">{getSubject("Friday")}</td>
+                            <td className="border px-4 py-3 text-center">
+                              {p.number}
+                            </td>
+                            <td className="border px-4 py-3 text-center">
+                              {p.time}
+                            </td>
+                            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(
+                              (day) => {
+                                const entry = getPeriodEntry(
+                                  currentTimetable,
+                                  day,
+                                  p.number
+                                );
+                                return (
+                                  <td
+                                    key={day}
+                                    className="border px-3 py-2 text-center"
+                                    style={
+                                      entry?.teacherAssignmentStatus ===
+                                        "UNASSIGNED" ||
+                                      (entry?.teacherId === null &&
+                                        entry?.subjectId)
+                                        ? {
+                                            background:
+                                              "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                                          }
+                                        : {}
+                                    }
+                                  >
+                                    <TimetableCell
+                                      entry={entry}
+                                      subjectNameById={subjectNameById}
+                                    />
+                                  </td>
+                                );
+                              }
+                            )}
                           </tr>
 
                           {/* Insert interval row visually after period 4 */}
                           {p.number === 4 && (
-                            <tr>
-                              <td className="border px-4 py-3 text-center">—</td>
-                              <td className="border px-4 py-3 text-center font-semibold">10:10 - 10:30 (Interval)</td>
-                              <td className="border px-4 py-3 text-center">Interval</td>
-                              <td className="border px-4 py-3 text-center">Interval</td>
-                              <td className="border px-4 py-3 text-center">Interval</td>
-                              <td className="border px-4 py-3 text-center">Interval</td>
-                              <td className="border px-4 py-3 text-center">Interval</td>
+                            <tr style={{ background: "#f0fdf4" }}>
+                              <td className="border px-4 py-3 text-center">
+                                —
+                              </td>
+                              <td className="border px-4 py-3 text-center font-semibold">
+                                10:10 - 10:30
+                              </td>
+                              {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(
+                                (day) => (
+                                  <td
+                                    key={day}
+                                    className="border px-4 py-3 text-center font-semibold text-green-700"
+                                  >
+                                    Interval
+                                  </td>
+                                )
+                              )}
                             </tr>
                           )}
                         </React.Fragment>
@@ -260,6 +469,83 @@ const ViewTimetable = () => {
                     })}
                   </tbody>
                 </table>
+              </div>
+
+              {/* ── Legend ──────────────────────────────────────────────────── */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "24px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#374151",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background: "white",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  Normal period
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#92400e",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background:
+                        "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                      border: "2px solid #f59e0b",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  ⚠ Teacher Not Assigned — subject is scheduled, teacher must
+                  be assigned manually
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.8rem",
+                    color: "#065f46",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      background: "#f0fdf4",
+                      border: "1px solid #6ee7b7",
+                      borderRadius: "3px",
+                      flexShrink: 0,
+                    }}
+                  />
+                  Interval break
+                </div>
               </div>
             </div>
           )}

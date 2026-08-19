@@ -40,7 +40,8 @@ def test_solver_with_varying_periods_and_shared_teachers():
             })
             sub_id += 1
 
-    timetable = _build_deterministic_timetable(teachers, subjects)
+    result = _build_deterministic_timetable(teachers, subjects)
+    timetable = result["timetable"]
 
     assert "6A" in timetable
     assert "7A" in timetable
@@ -49,7 +50,7 @@ def test_solver_with_varying_periods_and_shared_teachers():
     assert "10A" in timetable
     assert "11A" in timetable
 
-    val_res = validate_timetable(timetable, subjects, teachers)
+    val_res = validate_timetable(result, subjects, teachers)
     assert val_res["is_valid"] is True
     assert len(val_res["hard_errors"]) == 0
 
@@ -73,7 +74,8 @@ def test_solver_leaves_blank_periods_when_teachers_missing():
         subjects.append({"id": f"sub_{sub_id}", "grade": g, "subjectName": "Math", "periodsPerWeek": 40, "assignedTeacher": f"t_{g}"})
         sub_id += 1
 
-    timetable = _build_deterministic_timetable(teachers, subjects)
+    result = _build_deterministic_timetable(teachers, subjects)
+    timetable = result["timetable"]
 
     assert "6A" in timetable
     assert "7A" in timetable
@@ -84,8 +86,8 @@ def test_solver_leaves_blank_periods_when_teachers_missing():
     ]
     assert len(math_entries) == 10
 
-    # Validator checks: should pass without hard errors, producing blank periods for Grade 6
-    val_res = validate_timetable(timetable, subjects, teachers)
+    # Validator checks: should pass without hard errors, producing unassigned warnings for Grade 6
+    val_res = validate_timetable(result, subjects, teachers)
     assert val_res["is_valid"] is True
     assert len(val_res["hard_errors"]) == 0
-    assert any(w["type"] == "missing_periods" for w in val_res["warnings"])
+    assert any(w["type"] == "unassigned_teacher" for w in val_res["warnings"])

@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
 class PeriodEntry(BaseModel):
     period: int = Field(..., ge=1, le=8, description="Period number (1-8)")
     subjectId: str = Field(..., description="Subject ObjectId string")
-    teacherId: str = Field(..., description="Teacher ObjectId string")
+    teacherId: Optional[str] = Field(
+        None,
+        description="Teacher ObjectId string. Null when teacherAssignmentStatus='UNASSIGNED'.",
+    )
+    teacherAssignmentStatus: Optional[str] = Field(
+        None,
+        description="'ASSIGNED', 'UNASSIGNED', or 'FREE'. Required when teacherId is null.",
+    )
     subjectName: Optional[str] = None
     teacherName: Optional[str] = None
 
