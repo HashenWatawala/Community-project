@@ -321,17 +321,11 @@ const ViewTimetable = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header>
+    <div className="flex">
+      <Sidebar />
+      <div className="flex-1">
         <Navbar />
-      </header>
-
-      <div className="flex">
-        <aside className="hidden md:block">
-          <Sidebar />
-        </aside>
-
-        <main className="flex-1 p-6">
+        <div className="p-8 bg-gray-100 min-h-screen">
           <h3 className="text-2xl font-semibold mb-6 text-gray-800">
             View Timetable
           </h3>
@@ -597,7 +591,7 @@ const ViewTimetable = () => {
               </div>
             </div>
           )}
-        </main>
+        </div>
       </div>
       {/* Tooltip popup (follows cursor) */}
       {tooltip.visible && (
