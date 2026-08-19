@@ -3,6 +3,7 @@ import Navbar from "../../components/Navbar";
 import axios from "axios";
 import React, { useState, useEffect } from "react";
 import { API } from "../../utils/auth";
+import { jsPDF } from "jspdf";
 
 // ── Inline styles for teacher-unassigned warning cells ───────────────────────
 const unassignedCellStyle = {
@@ -109,6 +110,8 @@ const ViewTimetable = () => {
   const [error, setError] = useState("");
   const [hasUnassigned, setHasUnassigned] = useState(false);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, text: "" });
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const subjectNameById = subjects.reduce((lookup, subject) => {
     lookup[subject.id] = subject.subjectName;
@@ -137,7 +140,7 @@ const ViewTimetable = () => {
 
   const fetchTimetableDoc = async () => {
     try {
-      const res = await axios.get(`${API}/api/timetable`);
+      const res = await axios.get(`${API}/api/timetable/`);
       const timetableDoc = res.data?.timetable || res.data || {};
 
       // Build grade -> classes map from timetable keys like '6A', '7B'
@@ -172,7 +175,7 @@ const ViewTimetable = () => {
       setLoading(true);
       setError("");
 
-      const response = await axios.get(`${API}/api/timetable`, {
+      const response = await axios.get(`${API}/api/timetable/`, {
         params: {
           className: selectedClass,
         },
@@ -266,6 +269,90 @@ const ViewTimetable = () => {
 
   const handleHoverEnd = () => {
     setTooltip({ visible: false, x: 0, y: 0, text: "" });
+  };
+
+  const updateEntry = (day, period, field, value) => {
+    setCurrentTimetable((previous) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        [day]: previous[day].map((entry) =>
+          entry.period === period
+            ? {
+                ...entry,
+                [field]: value || null,
+                ...(field === "teacherId"
+                  ? { teacherAssignmentStatus: value ? "ASSIGNED" : "UNASSIGNED" }
+                  : {}),
+              }
+            : entry
+        ),
+      };
+    });
+  };
+
+  const saveTimetable = async () => {
+    try {
+      setIsSaving(true);
+      await axios.put(`${API}/api/timetable/class/${encodeURIComponent(selectedClass)}`, {
+        schedule: currentTimetable,
+      });
+      setIsEditing(false);
+      await fetchTimetable();
+      await fetchTimetableDoc();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to save timetable changes.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const downloadPdf = () => {
+    if (!currentTimetable) return;
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const left = 12;
+    const columnWidths = [16, 30, 44, 44, 44, 44, 44];
+    let y = 16;
+
+    pdf.setFontSize(16);
+    pdf.text(`Timetable - ${selectedClass}`, left, y);
+    y += 10;
+    pdf.setFontSize(8);
+    const headers = ["Period", "Time", ...days];
+    let x = left;
+    headers.forEach((header, index) => {
+      pdf.setFillColor(30, 64, 175);
+      pdf.setTextColor(255, 255, 255);
+      pdf.rect(x, y, columnWidths[index], 8, "F");
+      pdf.text(header, x + 2, y + 5);
+      x += columnWidths[index];
+    });
+    y += 8;
+
+    periods.forEach((period) => {
+      x = left;
+      const row = [
+        String(period.number),
+        period.time,
+        ...days.map((day) => {
+          const entry = getPeriodEntry(currentTimetable, day, period.number);
+          const subject = subjectNameById[entry?.subjectId] || entry?.subjectId || "-";
+          const teacher = teacherNameById[entry?.teacherId] || "Unassigned";
+          return `${subject}\n${teacher}`;
+        }),
+      ];
+      const rowHeight = 14;
+      row.forEach((value, index) => {
+        pdf.setTextColor(31, 41, 55);
+        pdf.rect(x, y, columnWidths[index], rowHeight);
+        pdf.text(String(value).split("\n"), x + 2, y + 5);
+        x += columnWidths[index];
+      });
+      y += rowHeight;
+    });
+
+    pdf.save(`timetable-${selectedClass}.pdf`);
   };
 
   // derive available grades from gradeMap or fallback to 6-11
@@ -414,9 +501,28 @@ const ViewTimetable = () => {
 
           {currentTimetable && (
             <div className="bg-white rounded-xl shadow-md p-6">
-              <h4 className="text-lg font-semibold text-center mb-5">
-                Timetable - {selectedClass}
-              </h4>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                <h4 className="text-lg font-semibold">Timetable - {selectedClass}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {!isEditing ? (
+                    <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 rounded bg-blue-700 text-white hover:bg-blue-800">
+                      Edit Timetable
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => { setIsEditing(false); fetchTimetable(); }} className="px-4 py-2 rounded border border-gray-300">
+                        Cancel
+                      </button>
+                      <button type="button" onClick={saveTimetable} disabled={isSaving} className="px-4 py-2 rounded bg-green-700 text-white disabled:opacity-60">
+                        {isSaving ? "Saving..." : "Save Changes"}
+                      </button>
+                    </>
+                  )}
+                  <button type="button" onClick={downloadPdf} className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-900">
+                    Download PDF
+                  </button>
+                </div>
+              </div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-full border border-gray-400">
@@ -472,13 +578,38 @@ const ViewTimetable = () => {
                                         : {}
                                     }
                                   >
-                                    <TimetableCell
-                                      entry={entry}
-                                      subjectNameById={subjectNameById}
-                                      onHoverStart={handleHoverStart}
-                                      onHoverMove={handleHoverMove}
-                                      onHoverEnd={handleHoverEnd}
-                                    />
+                                    {isEditing ? (
+                                      <div className="space-y-1">
+                                        <select
+                                          value={entry?.subjectId || ""}
+                                          onChange={(e) => updateEntry(day, p.number, "subjectId", e.target.value)}
+                                          className="w-full border rounded px-1 py-1 text-xs"
+                                        >
+                                          <option value="">No subject</option>
+                                          {subjects.map((subject) => (
+                                            <option key={subject.id} value={subject.id}>{subject.subjectName}</option>
+                                          ))}
+                                        </select>
+                                        <select
+                                          value={entry?.teacherId || ""}
+                                          onChange={(e) => updateEntry(day, p.number, "teacherId", e.target.value)}
+                                          className="w-full border rounded px-1 py-1 text-xs"
+                                        >
+                                          <option value="">Unassigned</option>
+                                          {teachers.map((teacher) => (
+                                            <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ) : (
+                                      <TimetableCell
+                                        entry={entry}
+                                        subjectNameById={subjectNameById}
+                                        onHoverStart={handleHoverStart}
+                                        onHoverMove={handleHoverMove}
+                                        onHoverEnd={handleHoverEnd}
+                                      />
+                                    )}
                                   </td>
                                 );
                               }

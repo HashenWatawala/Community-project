@@ -2,8 +2,13 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.database import get_database, close_client
 from app.routes import subject_routes, auth_routes, teacher_routes, timetable_routes
@@ -28,9 +33,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # ---- Root endpoint ----
-@app.get("/")
-def read_root():
-    return {"message": "Backend is running successfully 🚀"}
+@app.get("/health")
+def read_health():
+    return {"status": "ok", "message": "Backend is running successfully 🚀"}
 
 # ---- CORS middleware ----
 app.add_middleware(
@@ -98,3 +103,29 @@ async def health_db():
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---- Serve React Frontend ----
+# Determine base directory depending on whether we're frozen (PyInstaller) or running from source
+if getattr(sys, 'frozen', False):
+    base_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    frontend_dist_dir = base_dir / "frontend" / "dist"
+else:
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    frontend_dist_dir = base_dir / "frontend" / "dist"
+
+if frontend_dist_dir.exists():
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist_dir / "assets")), name="assets")
+
+    # Catch-all route for SPA client-side routing
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        # Don't intercept API routes
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API route not found")
+        
+        index_file = frontend_dist_dir / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        return {"error": "Frontend build not found"}
+else:
+    logger.warning(f"Frontend dist directory not found at {frontend_dist_dir}")
