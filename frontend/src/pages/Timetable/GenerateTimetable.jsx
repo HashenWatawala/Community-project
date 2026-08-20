@@ -71,20 +71,11 @@ const GenerateTimetable = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Top navbar */}
-      <header>
+    <div className="flex">
+      <Sidebar />
+      <div className="flex-1">
         <Navbar />
-      </header>
-
-      <div className="flex">
-        {/* Sidebar (left) */}
-        <aside className="hidden md:block">
-          <Sidebar />
-        </aside>
-
-        {/* Main content */}
-        <main className="flex-1 p-6">
+        <div className="p-8 bg-gray-100 min-h-screen">
           <h3 className="text-2xl font-semibold mb-6 text-gray-800">
             Generate Timetable
           </h3>
@@ -162,7 +153,7 @@ const GenerateTimetable = () => {
               )}
             </div>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );

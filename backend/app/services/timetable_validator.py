@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Dict, List
 
+# Status constants — must match gemini_service.py
+_TEACHER_UNASSIGNED_STATUS = "UNASSIGNED"
+_FREE_PERIOD_SUBJECT_ID = "__free_period__"
+_FREE_PERIOD_TEACHER_ID = "__none__"
 
 
 def _normalize_subject_name(value: Any) -> str:
@@ -25,12 +29,19 @@ def validate_timetable(
     1. Teacher Clashes  — a teacher may not teach >1 class at the same day+period.
     2. Period Clashes   — each class may have only one subject per period per day.
     3. Subject Count    — scheduled count must equal periodsPerWeek from MongoDB.
-    4. Teacher Assignment — only the assigned teacher may teach a subject.
+    4. Teacher Assignment — only the assigned teacher may teach a subject (skipped
+                            for entries explicitly marked UNASSIGNED).
     5. Missing Periods  — each class must have all 8 periods on every weekday.
     6. Grade Subject Match — a class may only use subjects belonging to its grade.
 
+    Teacher-unassigned entries (teacherId=null, teacherAssignmentStatus="UNASSIGNED"):
+    - Are VALID as long as subjectId is present and valid.
+    - Are NEVER treated as incomplete or blank.
+    - Skip teacher qualification, clash, and load checks.
+    - Generate informational warnings, not hard errors.
+
     Returns:
-        {"is_valid": bool, "errors": List[Dict[str, Any]]}
+        {"is_valid": bool, "errors": List[Dict[str, Any]], "hard_errors": ..., "warnings": ...}
     """
     hard_errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
@@ -47,16 +58,23 @@ def validate_timetable(
     expected_classes = ["6A", "7A", "8A", "9A", "10A", "11A"]
     days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
+    # Support timetable wrapped in {"timetable": {...}} envelope (solver output)
+    # or a bare dict (legacy / Gemini fallback).
+    if "timetable" in timetable_data and isinstance(timetable_data["timetable"], dict):
+        raw_schedule = timetable_data["timetable"]
+    else:
+        raw_schedule = timetable_data
+
     # ── Check that all expected classes are present ───────────────────────────
     for cls in expected_classes:
-        if cls not in timetable_data:
+        if cls not in raw_schedule:
             hard_errors.append({
                 "type": "missing_class",
                 "message": f"Class {cls} is missing from the generated timetable.",
                 "details": {"class": cls},
             })
 
-    active_classes = [c for c in expected_classes if c in timetable_data]
+    active_classes = [c for c in expected_classes if c in raw_schedule]
 
     # ── Per-day teacher occupancy: day → period → teacher_id → [classes] ──────
     teacher_schedule: Dict[str, Dict[int, Dict[str, List[str]]]] = {
@@ -81,7 +99,7 @@ def validate_timetable(
             })
             continue
 
-        class_schedule = timetable_data[class_name]
+        class_schedule = raw_schedule[class_name]
 
         for day in days_of_week:
             # ── Day presence ──────────────────────────────────────────────────
@@ -115,25 +133,49 @@ def validate_timetable(
 
                 p_num = entry.get("period")
                 raw_sub_id = entry.get("subjectId", "")
-                raw_teach_id = entry.get("teacherId", "")
+                raw_teach_id = entry.get("teacherId")  # may legitimately be None
+                assignment_status = str(entry.get("teacherAssignmentStatus", "")).upper()
 
-                # Normalise IDs
-                sub_id = str(raw_sub_id).strip()
-                teach_id = str(raw_teach_id).strip()
+                # Normalise subject ID
+                sub_id = str(raw_sub_id).strip() if raw_sub_id is not None else ""
+
+                # Determine if this entry is an explicit UNASSIGNED entry
+                is_unassigned = (
+                    (raw_teach_id is None or str(raw_teach_id).strip() == "")
+                    and assignment_status == _TEACHER_UNASSIGNED_STATUS
+                )
+
+                # Normalise teacher ID only when a teacher is actually present
+                teach_id: str = ""
+                if not is_unassigned and raw_teach_id is not None:
+                    teach_id = str(raw_teach_id).strip()
 
                 # ── Required fields ────────────────────────────────────────────
-                if p_num is None or not sub_id or not teach_id:
+                # subjectId must always be present.
+                # teacherId may be null ONLY when teacherAssignmentStatus == "UNASSIGNED".
+                # If teacherId is null/empty and status is NOT "UNASSIGNED" → hard error.
+                if p_num is None or not sub_id:
                     hard_errors.append({
                         "type": "incomplete_period_entry",
                         "message": (
                             f"Incomplete period entry in {class_name}/{day}. "
-                            "Must contain period, subjectId, and teacherId."
+                            "Must contain period and subjectId."
                         ),
                         "details": {"class": class_name, "day": day, "entry": entry},
                     })
                     continue
 
-                # (no interval sentinel expected; every class must have 8 real periods)
+                if (raw_teach_id is None or str(raw_teach_id).strip() == "") and not is_unassigned:
+                    hard_errors.append({
+                        "type": "incomplete_period_entry",
+                        "message": (
+                            f"Period {p_num} in {class_name}/{day} has no teacherId and "
+                            "teacherAssignmentStatus is not 'UNASSIGNED'. "
+                            "Set teacherAssignmentStatus='UNASSIGNED' when teacherId is null."
+                        ),
+                        "details": {"class": class_name, "day": day, "entry": entry},
+                    })
+                    continue
 
                 # ── Period range ────────────────────────────────────────────────
                 if not isinstance(p_num, int) or p_num < 1 or p_num > 8:
@@ -184,7 +226,27 @@ def validate_timetable(
                         },
                     })
 
-                # ── Teacher assignment ──────────────────────────────────────────
+                # ── UNASSIGNED entry: emit warning, skip all teacher checks ──────
+                if is_unassigned:
+                    warnings.append({
+                        "type": "unassigned_teacher",
+                        "message": (
+                            f"{class_name}/{day} P{p_num}: '{subject['subjectName']}' "
+                            "has no teacher assigned (teacherAssignmentStatus=UNASSIGNED)."
+                        ),
+                        "details": {
+                            "class": class_name, "day": day, "period": p_num,
+                            "subjectId": sub_id, "subjectName": subject["subjectName"],
+                        },
+                    })
+                    # Count the subject period (it still contributes to the 40-period total)
+                    subject_counts[class_name][sub_id] = (
+                        subject_counts[class_name].get(sub_id, 0) + 1
+                    )
+                    # Do NOT track teacher occupancy or load — no teacher assigned
+                    continue
+
+                # ── Teacher assignment (only for normally assigned entries) ───────
                 expected_teach_id = _normalize_id(subject.get("assignedTeacher", ""))
                 qualified_teachers: List[str] = []
                 if expected_teach_id:

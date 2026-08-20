@@ -25,9 +25,12 @@ MAX_TEACHER_WEEKLY_LOAD = 28
 MAX_SOLVER_RESTARTS = 10
 MAX_BACKTRACKS_PER_RESTART = 50_000
 
-# Sentinel subject used to pad grades that have < 40 periods
+# Sentinel subject used to pad grades that have < 40 subject periods
 _FREE_PERIOD_SUBJECT_ID = "__free_period__"
 _FREE_PERIOD_TEACHER_ID = "__none__"
+
+# Status constant for unassigned teacher slots
+TEACHER_UNASSIGNED_STATUS = "UNASSIGNED"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -117,9 +120,10 @@ def _preflight_check(
         for subj in subjects:
             teachers = _allowed_teachers_for_subject(subj, teacher_lookup, qualification_map)
             if not teachers:
+                # No qualified teacher — this is allowed; subject will be marked UNASSIGNED
                 logger.warning(
                     "Grade %d, subject '%s' (id=%s): no qualified teacher found. "
-                    "This subject will be left unassigned (blank periods).",
+                    "This subject will be marked as Teacher Unassigned.",
                     grade, subj.get('subjectName'), subj.get('id')
                 )
                 continue
@@ -132,7 +136,7 @@ def _preflight_check(
                 teacher_name = teacher_lookup.get(teacher_id, {}).get("fullName", teacher_id)
                 logger.warning(
                     "Teacher '%s' (id=%s) is the only teacher for subjects requiring %d periods/week, "
-                    "which exceeds the %d limit. Excess periods will be left blank.",
+                    "which exceeds the %d limit. Some periods will be marked as Teacher Unassigned.",
                     teacher_name, teacher_id, demand, MAX_TEACHER_WEEKLY_LOAD
                 )
 
@@ -153,6 +157,12 @@ def _build_deterministic_timetable(
     For each time slot, the solver simultaneously assigns one subject+teacher
     pair to every grade, ensuring no two grades share the same teacher in the
     same slot.
+
+    When a subject cannot receive a valid teacher assignment (all qualified
+    teachers are busy or over their weekly load), the subject is still placed
+    in the slot with teacherId=null and teacherAssignmentStatus="UNASSIGNED".
+    This ensures every grade always has exactly 40 subject periods — never
+    blank cells or free-period substitutes for teacher unavailability.
     """
     teacher_lookup = _build_teacher_lookup(teachers)
     qualification_map = _build_qualification_map(teachers)
@@ -199,7 +209,9 @@ def _build_deterministic_timetable(
                 "candidates": candidates,
             })
 
-        # Auto-pad with free periods if fewer than 40
+        # Auto-pad with free periods if fewer than 40 subject periods are defined.
+        # NOTE: This padding is for LEGITIMATE shortfall (school chose fewer than 40
+        # subject periods per week). It is NOT used as a fallback for missing teachers.
         shortfall = PERIODS_PER_WEEK - total_periods
         if shortfall > 0:
             logger.info(
@@ -240,6 +252,10 @@ def _build_deterministic_timetable(
     max_teacher_cap = MAX_TEACHER_WEEKLY_LOAD
     logger.info("Teacher weekly cap set to %d", max_teacher_cap)
 
+    # ── Unassigned diagnostics ───────────────────────────────────────────────
+    # Collected during the successful solve pass (not during backtracking)
+    unassigned_diagnostics: List[Dict[str, Any]] = []
+
     # ── Solver with restarts ─────────────────────────────────────────────────
     last_failure_info: Optional[str] = None
 
@@ -274,6 +290,9 @@ def _build_deterministic_timetable(
         teacher_weekly_load: Dict[str, int] = {tid: 0 for tid in teacher_lookup}
         teacher_weekly_load[_FREE_PERIOD_TEACHER_ID] = 0
 
+        # Per-restart unassigned tracking (discarded on failed restarts)
+        restart_unassigned: List[Dict[str, Any]] = []
+
         backtrack_count = 0
         budget_exceeded = False
 
@@ -303,6 +322,12 @@ def _build_deterministic_timetable(
 
                 grade = grade_order[gidx]
 
+                # Compute how many times each subject is scheduled today
+                today_counts = {}
+                for entry in timetable[f"{grade}A"][day]:
+                    sid = entry["subjectId"]
+                    today_counts[sid] = today_counts.get(sid, 0) + 1
+
                 # Collect all subjects with remaining periods for this grade
                 choosable: List[Tuple[str, List[str]]] = []
                 for sid, rem in remaining[grade].items():
@@ -313,6 +338,7 @@ def _build_deterministic_timetable(
                     # All subjects for this grade are fully scheduled — skip
                     return _assign_grade(gidx + 1)
 
+                # ── Option 1: Place a real subject WITH a valid teacher ────────
                 # Collect real subject options that have available teachers in this slot
                 valid_options = []
                 for sid, cands in choosable:
@@ -328,9 +354,16 @@ def _build_deterministic_timetable(
 
                 if valid_options:
                     # Randomize order slightly to avoid deterministic tie patterns,
-                    # then sort by fewest available teachers and most remaining periods.
+                    # then sort by:
+                    # 1. Fewest times scheduled today (balances subjects across the day)
+                    # 2. Fewest available teachers
+                    # 3. Most remaining periods
                     random.shuffle(valid_options)
-                    valid_options.sort(key=lambda item: (len(item[1]), -remaining[grade][item[0]]))
+                    valid_options.sort(key=lambda item: (
+                        today_counts.get(item[0], 0),
+                        len(item[1]),
+                        -remaining[grade][item[0]]
+                    ))
 
                     for sid, avail_teachers in valid_options:
                         # rotate available teachers list by grade index to bias different
@@ -349,6 +382,7 @@ def _build_deterministic_timetable(
                                 "period": period,
                                 "subjectId": sid,
                                 "teacherId": tid,
+                                "teacherAssignmentStatus": "ASSIGNED",
                             })
                             teacher_schedule[day][period].add(tid)
                             teacher_weekly_load[tid] += 1
@@ -367,23 +401,101 @@ def _build_deterministic_timetable(
                                 budget_exceeded = True
                                 return False
 
-                # Free period option (either explicitly defined shortfall, or as a blank fallback if no real subject could be assigned)
-                has_free_period_rem = remaining[grade].get(_FREE_PERIOD_SUBJECT_ID, 0) > 0
+                # ── Option 2: Place a real subject WITHOUT a teacher (UNASSIGNED) ─
+                # If real subjects exist with remaining periods but no valid teacher
+                # is available for any of them in this slot, place the one with the
+                # most remaining periods and mark it UNASSIGNED.
+                # This preserves the subject cell — it is NEVER replaced with a blank
+                # or a free period due to teacher unavailability.
+                real_choosable = [
+                    (sid, cands) for sid, cands in choosable
+                    if sid != _FREE_PERIOD_SUBJECT_ID
+                ]
+                if real_choosable and not valid_options:
+                    # Pick the real subject focusing on daily balance and most remaining periods
+                    real_choosable_sorted = sorted(
+                        real_choosable, key=lambda x: (
+                            today_counts.get(x[0], 0),
+                            -remaining[grade][x[0]]
+                        )
+                    )
+                    sid, cands = real_choosable_sorted[0]
+                    subject_name = next(
+                        (info["name"] for info in grade_subject_info[grade] if info["id"] == sid),
+                        sid,
+                    )
+                    # Determine the reason no teacher could be assigned
+                    all_busy = [
+                        tid for tid in cands
+                        if tid in teacher_schedule[day][period]
+                    ]
+                    all_overloaded = [
+                        tid for tid in cands
+                        if teacher_weekly_load.get(tid, 0) >= max_teacher_cap
+                    ]
+                    if not cands:
+                        reason = "no qualified teacher exists for this subject"
+                    elif len(all_busy) + len(all_overloaded) >= len(cands):
+                        busy_part = f"{len(all_busy)} busy in this slot" if all_busy else ""
+                        load_part = f"{len(all_overloaded)} at weekly load limit" if all_overloaded else ""
+                        reason = "; ".join(filter(None, [busy_part, load_part]))
+                    else:
+                        reason = "all qualified teachers are unavailable or would violate constraints"
 
-                if has_free_period_rem or not valid_options:
+                    diag_msg = (
+                        f"Grade {grade}A - {subject_name} - {day} Period {period}: "
+                        f"Teacher Not Assigned because {reason}."
+                    )
+                    logger.warning("UNASSIGNED: %s", diag_msg)
+                    restart_unassigned.append({
+                        "class": f"{grade}A",
+                        "subjectId": sid,
+                        "subjectName": subject_name,
+                        "day": day,
+                        "period": period,
+                        "reason": reason,
+                        "message": diag_msg,
+                    })
+
                     timetable[f"{grade}A"][day].append({
                         "period": period,
-                        "subjectId": _FREE_PERIOD_SUBJECT_ID,
-                        "teacherId": _FREE_PERIOD_TEACHER_ID,
+                        "subjectId": sid,
+                        "teacherId": None,
+                        "teacherAssignmentStatus": TEACHER_UNASSIGNED_STATUS,
                     })
-                    if has_free_period_rem:
-                        remaining[grade][_FREE_PERIOD_SUBJECT_ID] -= 1
+                    remaining[grade][sid] -= 1
 
                     if _assign_grade(gidx + 1):
                         return True
 
-                    if has_free_period_rem:
-                        remaining[grade][_FREE_PERIOD_SUBJECT_ID] += 1
+                    # Backtrack this UNASSIGNED placement too
+                    remaining[grade][sid] += 1
+                    timetable[f"{grade}A"][day].pop()
+                    restart_unassigned.pop()
+
+                    backtrack_count += 1
+                    if backtrack_count >= MAX_BACKTRACKS_PER_RESTART:
+                        budget_exceeded = True
+                        return False
+
+                # ── Option 3: Free period (legitimate shortfall padding only) ──
+                # Only used when the grade genuinely has fewer than 40 subject
+                # periods defined — NOT as a fallback for teacher unavailability.
+                has_free_period_rem = remaining[grade].get(_FREE_PERIOD_SUBJECT_ID, 0) > 0
+
+                if has_free_period_rem:
+                    timetable[f"{grade}A"][day].append({
+                        "period": period,
+                        "subjectId": _FREE_PERIOD_SUBJECT_ID,
+                        "teacherId": _FREE_PERIOD_TEACHER_ID,
+                        "teacherAssignmentStatus": "FREE",
+                    })
+                    remaining[grade][_FREE_PERIOD_SUBJECT_ID] -= 1
+
+                    if _assign_grade(gidx + 1):
+                        return True
+
+                    remaining[grade][_FREE_PERIOD_SUBJECT_ID] += 1
                     timetable[f"{grade}A"][day].pop()
 
                     backtrack_count += 1
@@ -402,7 +514,8 @@ def _build_deterministic_timetable(
         if _try_slot(0):
             logger.info("Solver succeeded on restart %d (backtracks: %d)", restart, backtrack_count)
 
-            # Strip free-period sentinels from the output
+            # Strip ONLY legitimate free-period sentinels (__free_period__) from output.
+            # UNASSIGNED subject entries are NEVER stripped — they must remain visible.
             for class_key in timetable:
                 for day in DAYS:
                     timetable[class_key][day] = [
@@ -410,7 +523,21 @@ def _build_deterministic_timetable(
                         if entry["subjectId"] != _FREE_PERIOD_SUBJECT_ID
                     ]
 
-            return timetable
+            # Commit unassigned diagnostics from this successful restart
+            unassigned_diagnostics.clear()
+            unassigned_diagnostics.extend(restart_unassigned)
+
+            if unassigned_diagnostics:
+                logger.warning(
+                    "Timetable generated with %d unassigned teacher slot(s). "
+                    "Subjects are still visible in those slots.",
+                    len(unassigned_diagnostics),
+                )
+
+            return {
+                "timetable": timetable,
+                "unassigned_diagnostics": unassigned_diagnostics,
+            }
 
         logger.warning(
             "Solver restart %d exhausted backtrack budget (%d). %s",
@@ -494,7 +621,9 @@ Return JSON only.
         text = text.replace("```", "").strip()
 
     try:
-        return json.loads(text)
+        raw = json.loads(text)
+        # Wrap in the same envelope as the deterministic solver for uniform handling
+        return {"timetable": raw, "unassigned_diagnostics": []}
     except json.JSONDecodeError as exc:
         logger.warning("Gemini returned invalid JSON: %s", exc)
         return None
@@ -507,6 +636,10 @@ async def generate_timetable(
     """
     Primary entry point.  Tries the deterministic solver first, then falls back
     to Gemini AI if the solver raises ValueError.
+
+    Returns a dict with keys:
+        "timetable"              — the class schedules
+        "unassigned_diagnostics" — list of slots where teacher could not be assigned
     """
     try:
         return _build_deterministic_timetable(teachers, subjects)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.schemas.timetable_schema import (
     TimetableResponse,
@@ -16,8 +17,13 @@ from app.services.timetable_service import (
     get_teacher_timetable,
     get_grade_timetable,
 )
+from app.models.timetable_model import update_class_schedule
 
 router = APIRouter(prefix="/api/timetable", tags=["timetable"])
+
+
+class ClassScheduleUpdate(BaseModel):
+    schedule: Dict[str, Any]
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
@@ -38,6 +44,7 @@ async def generate_timetable_endpoint():
 
 
 @router.get("/")
+@router.get("", include_in_schema=False)
 async def get_timetable_endpoint(
     teacherId: Optional[str] = Query(None, description="Get dynamically computed schedule for a specific teacher"),
     grade: Optional[int] = Query(None, ge=6, le=11, description="Get dynamically filtered schedule for a grade (6-11)"),
@@ -91,6 +98,31 @@ async def get_timetable_endpoint(
             detail="No timetable has been generated yet."
         )
     return timetable_doc
+
+
+@router.put("/class/{class_name}")
+async def update_class_timetable_endpoint(class_name: str, payload: ClassScheduleUpdate):
+    expected_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
+    if set(payload.schedule) != expected_days:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Schedule must contain Monday through Friday.",
+        )
+
+    for day, entries in payload.schedule.items():
+        if not isinstance(entries, list) or {entry.get("period") for entry in entries} != set(range(1, 9)):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{day} must contain periods 1 through 8.",
+            )
+
+    updated = await update_class_schedule(class_name, payload.schedule)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No schedule found for class: {class_name}",
+        )
+    return updated["timetable"][class_name]
 
 
 @router.delete("/", status_code=status.HTTP_200_OK)

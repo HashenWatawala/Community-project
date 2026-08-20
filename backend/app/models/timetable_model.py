@@ -48,3 +48,17 @@ async def delete_timetable_doc() -> bool:
     col = _collection()
     res = await col.delete_many({})
     return res.deleted_count > 0
+
+
+async def update_class_schedule(class_name: str, schedule: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    col = _collection()
+    doc = await col.find_one({})
+    if not doc or class_name not in doc.get("timetable", {}):
+        return None
+
+    await col.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {f"timetable.{class_name}": schedule}},
+    )
+    updated = await col.find_one({"_id": doc["_id"]})
+    return _to_timetable_out(updated) if updated else None

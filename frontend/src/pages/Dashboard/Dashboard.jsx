@@ -1,46 +1,55 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
+import { fetchTeachersCount, fetchClassesCount } from "../../utils/dashboard";
 
 const Dashboard = () => {
   const [teachersCount, setTeachersCount] = useState(0);
   const [classesCount, setClassesCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Animate teachers count
-    const teachersTarget = 13;
-    const teachersIncrement = teachersTarget / 50;
-    let teachersCurrent = 0;
+    const fetchCounts = async () => {
+      setLoading(true);
+      const teachersData = await fetchTeachersCount();
+      const classesData = await fetchClassesCount();
 
-    const teachersInterval = setInterval(() => {
-      teachersCurrent += teachersIncrement;
-      if (teachersCurrent >= teachersTarget) {
-        setTeachersCount(teachersTarget);
+      // Animate teachers count
+      const teachersIncrement = teachersData / 50;
+      let teachersCurrent = 0;
+
+      const teachersInterval = setInterval(() => {
+        teachersCurrent += teachersIncrement;
+        if (teachersCurrent >= teachersData) {
+          setTeachersCount(teachersData);
+          clearInterval(teachersInterval);
+        } else {
+          setTeachersCount(Math.floor(teachersCurrent));
+        }
+      }, 30);
+
+      // Animate classes count
+      const classesIncrement = classesData / 50;
+      let classesCurrent = 0;
+
+      const classesInterval = setInterval(() => {
+        classesCurrent += classesIncrement;
+        if (classesCurrent >= classesData) {
+          setClassesCount(classesData);
+          clearInterval(classesInterval);
+          setLoading(false);
+        } else {
+          setClassesCount(Math.floor(classesCurrent));
+        }
+      }, 30);
+
+      return () => {
         clearInterval(teachersInterval);
-      } else {
-        setTeachersCount(Math.floor(teachersCurrent));
-      }
-    }, 30);
-
-    // Animate classes count
-    const classesTarget = 7;
-    const classesIncrement = classesTarget / 50;
-    let classesCurrent = 0;
-
-    const classesInterval = setInterval(() => {
-      classesCurrent += classesIncrement;
-      if (classesCurrent >= classesTarget) {
-        setClassesCount(classesTarget);
         clearInterval(classesInterval);
-      } else {
-        setClassesCount(Math.floor(classesCurrent));
-      }
-    }, 30);
-
-    return () => {
-      clearInterval(teachersInterval);
-      clearInterval(classesInterval);
+      };
     };
+
+    fetchCounts();
   }, []);
 
   return (
@@ -68,7 +77,9 @@ const Dashboard = () => {
                   <p className="text-gray-700 text-base mb-4">
                     Total Registered Teachers
                   </p>
-                  <p className="text-6xl font-bold text-gray-900">{teachersCount}</p>
+                  <p className="text-6xl font-bold text-gray-900">
+                    {loading ? "-" : teachersCount}
+                  </p>
                 </div>
                 <div className="text-7xl">
                   👩‍🏫
@@ -83,7 +94,9 @@ const Dashboard = () => {
                   <p className="text-gray-700 text-base mb-4">
                     Total Registered Classes
                   </p>
-                  <p className="text-6xl font-bold text-gray-900">{classesCount}</p>
+                  <p className="text-6xl font-bold text-gray-900">
+                    {loading ? "-" : classesCount}
+                  </p>
                 </div>
                 <div className="text-7xl">
                   👥

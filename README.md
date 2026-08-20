@@ -138,6 +138,24 @@ Expected response:
 
 ---
 
+## Build a Windows Executable
+
+The release build packages the FastAPI backend and the compiled React frontend into one file. Build it on Windows from the project root:
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+& .\backend\venv\Scripts\pip.exe install -r .\backend\requirements.txt
+& .\backend\venv\Scripts\pip.exe install pyinstaller
+& .\backend\venv\Scripts\pyinstaller.exe --clean --noconfirm .\TimetableManagementSystem.spec
+```
+
+The executable is created at `dist\TimetableManagementSystem.exe`. Copy `.env.example` to `dist\.env`, replace the placeholders with the target MongoDB and API settings, and then run the executable. MongoDB must be reachable from the target computer; it is not bundled into the executable.
+
+Close any running copy of `TimetableManagementSystem.exe` before rebuilding, otherwise Windows may keep the old executable because the file is locked.
+
 ## Notes
 
 - Ensure MongoDB is running before starting the backend.
