@@ -6,6 +6,7 @@ import { logoutUser } from "../utils/auth";
 function Navbar() {
   const navigate = useNavigate();
 
+  // Function to handle logout
   const handleLogout = () => {
     logoutUser();
     navigate("/login", { replace: true });
