@@ -1,16 +1,22 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { LogOut, UserRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { logoutUser } from "../utils/auth";
+import { logoutUser, getUser } from "../utils/auth";
 
 function Navbar() {
   const navigate = useNavigate();
+  const [user, setUser] = useState(null);
 
   // Function to handle logout
   const handleLogout = () => {
     logoutUser();
     navigate("/login", { replace: true });
   };
+
+  useEffect(() => {
+    const u = getUser();
+    setUser(u ? u.user : null);
+  }, []);
 
   return (
     <div className="w-full h-[100px] bg-white border-b border-gray-300 flex items-center justify-between pl-12 pr-16">
@@ -21,8 +27,8 @@ function Navbar() {
           <UserRound className="w-7 h-7 text-gray-800" />
         </div>
         <div className="leading-none">
-          <h2 className="text-lg font-bold text-gray-800 my-0">ADMIN NAME</h2>
-          <p className="text-lg text-gray-500 italic">role</p>
+          <h2 className="text-lg font-bold text-gray-800 my-0">{user?.fullName || "ADMIN NAME"}</h2>
+          <p className="text-lg text-gray-500 italic">{user?.role || "role"}</p>
         </div>
       </div>
 
