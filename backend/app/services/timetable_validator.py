@@ -33,6 +33,8 @@ def validate_timetable(
                             for entries explicitly marked UNASSIGNED).
     5. Missing Periods  — each class must have all 8 periods on every weekday.
     6. Grade Subject Match — a class may only use subjects belonging to its grade.
+    7. Teacher Consistency — each (class, subject) must use exactly one teacher
+                              across all days and periods.
 
     Teacher-unassigned entries (teacherId=null, teacherAssignmentStatus="UNASSIGNED"):
     - Are VALID as long as subjectId is present and valid.
@@ -86,6 +88,9 @@ def validate_timetable(
 
     # ── Per-class subject counters: class → subject_id → count ───────────────
     subject_counts: Dict[str, Dict[str, int]] = {cls: {} for cls in active_classes}
+
+    # ── Per-class subject→teachers: class → subject_id → set of teacher_ids ──
+    subject_teachers: Dict[str, Dict[str, set]] = {cls: {} for cls in active_classes}
 
     for class_name in active_classes:
         # Extract numeric grade from class name (e.g. "6A" → 6, "10A" → 10)
@@ -293,6 +298,11 @@ def validate_timetable(
                     subject_counts[class_name].get(sub_id, 0) + 1
                 )
 
+                # ── Track teacher per subject for consistency check ────────────
+                if sub_id not in subject_teachers[class_name]:
+                    subject_teachers[class_name][sub_id] = set()
+                subject_teachers[class_name][sub_id].add(teach_id)
+
                 # ── Track teacher occupancy for clash check ────────────────────
                 slot = teacher_schedule[day][p_num]
                 if teach_id not in slot:
@@ -331,6 +341,31 @@ def validate_timetable(
                             "classes": classes,
                         },
                     })
+
+    # ── Teacher consistency check (same teacher for each class+subject) ──────
+    for class_name in active_classes:
+        for sub_id, teacher_ids in subject_teachers[class_name].items():
+            if len(teacher_ids) > 1:
+                subject = subject_lookup.get(sub_id)
+                subject_name = subject["subjectName"] if subject else sub_id
+                teacher_names = [
+                    teacher_lookup.get(tid, {}).get("fullName", tid)
+                    for tid in sorted(teacher_ids)
+                ]
+                hard_errors.append({
+                    "type": "inconsistent_teacher",
+                    "message": (
+                        f"Subject '{subject_name}' in {class_name} is taught by "
+                        f"multiple teachers: {teacher_names}. "
+                        f"Each grade+subject must have exactly one teacher."
+                    ),
+                    "details": {
+                        "class": class_name,
+                        "subjectId": sub_id,
+                        "subjectName": subject_name,
+                        "teacherIds": sorted(teacher_ids),
+                    },
+                })
 
     # ── Weekly subject count check (informational warning) ────────────────────
     for class_name in active_classes:
