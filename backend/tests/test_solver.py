@@ -91,3 +91,74 @@ def test_solver_leaves_blank_periods_when_teachers_missing():
     assert val_res["is_valid"] is True
     assert len(val_res["hard_errors"]) == 0
     assert any(w["type"] == "unassigned_teacher" for w in val_res["warnings"])
+
+
+def test_solver_consistent_teacher_per_grade_subject():
+    """
+    When multiple teachers are qualified for the same subject in a grade,
+    the solver must pick exactly ONE teacher and use that teacher for all
+    periods of that (grade, subject) pair throughout the week.
+    """
+    # Create 3 teachers, each qualified to teach Math AND Science for grades 6-11
+    teachers = []
+    for i in range(1, 4):
+        teachers.append({
+            "id": f"t_{i}",
+            "fullName": f"Teacher {i}",
+            "subjects": [
+                {"name": "Math", "grades": [6, 7, 8, 9, 10, 11]},
+                {"name": "Science", "grades": [6, 7, 8, 9, 10, 11]},
+            ],
+        })
+
+    # Each grade has Math (20 ppw) and Science (20 ppw) = 40 total
+    subjects = []
+    sub_id = 1
+    for g in range(6, 12):
+        subjects.append({
+            "id": f"sub_{sub_id}",
+            "grade": g,
+            "subjectName": "Math",
+            "periodsPerWeek": 20,
+            "assignedTeacher": "t_1",  # preferred, but t_2 and t_3 also qualify
+        })
+        sub_id += 1
+        subjects.append({
+            "id": f"sub_{sub_id}",
+            "grade": g,
+            "subjectName": "Science",
+            "periodsPerWeek": 20,
+            "assignedTeacher": "t_2",  # preferred, but t_1 and t_3 also qualify
+        })
+        sub_id += 1
+
+    result = _build_deterministic_timetable(teachers, subjects)
+    timetable = result["timetable"]
+
+    # For every class, every subject should map to exactly one teacher
+    for class_key, days_schedule in timetable.items():
+        subject_teacher_map = {}
+        for day, entries in days_schedule.items():
+            for entry in entries:
+                sid = entry["subjectId"]
+                tid = entry.get("teacherId")
+                status = entry.get("teacherAssignmentStatus", "")
+                if status == "UNASSIGNED" or tid is None:
+                    continue
+                if sid not in subject_teacher_map:
+                    subject_teacher_map[sid] = tid
+                else:
+                    assert subject_teacher_map[sid] == tid, (
+                        f"{class_key}: subject {sid} has inconsistent teachers: "
+                        f"{subject_teacher_map[sid]} vs {tid}"
+                    )
+
+    # Validator should also pass with no hard errors
+    val_res = validate_timetable(result, subjects, teachers)
+    assert val_res["is_valid"] is True, (
+        f"Validation failed with hard errors: {val_res['hard_errors']}"
+    )
+    assert len(val_res["hard_errors"]) == 0
+    # Specifically, no inconsistent_teacher errors
+    assert not any(e["type"] == "inconsistent_teacher" for e in val_res["hard_errors"])
+

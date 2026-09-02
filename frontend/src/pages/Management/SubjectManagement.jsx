@@ -271,7 +271,7 @@ const SubjectManagement = () => {
     try {
       if (editingSubject) {
         // Update existing subject
-        const response = await fetch(`${API}/api/subjects/${editingSubject.id}/`, {
+        const response = await fetch(`${API}/api/subjects/${editingSubject.id}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -310,7 +310,7 @@ const SubjectManagement = () => {
   const handleDeleteSubject = async (id) => {
     if (window.confirm("Are you sure you want to delete this subject?")) {
       try {
-        const response = await fetch(`${API}/api/subjects/${id}/`, {
+        const response = await fetch(`${API}/api/subjects/${id}`, {
           method: "DELETE",
           headers: { ...(getUser()?.token ? { Authorization: `Bearer ${getUser().token}` } : {}) },
         });

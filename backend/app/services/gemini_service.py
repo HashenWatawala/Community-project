@@ -143,6 +143,59 @@ def _preflight_check(
     return diagnostics
 
 
+# ── Pre-assign one teacher per (grade, subject) ─────────────────────────────
+
+def _preassign_teachers(
+    grade_subject_info: Dict[int, List[Dict[str, Any]]],
+    teacher_lookup: Dict[str, Dict[str, Any]],
+) -> Dict[int, Dict[str, str]]:
+    """
+    For every (grade, subject) pair, lock exactly ONE teacher before the
+    backtracking solver runs.  This guarantees that the same Grade+Subject
+    always gets the same teacher across all periods and days.
+
+    Returns a mapping:  grade -> { subject_id -> teacher_id }
+    (Subjects with no qualified teacher are mapped to "" to signal UNASSIGNED.)
+    """
+    # Track committed load so we can spread teachers across grades.
+    committed_load: Dict[str, int] = {tid: 0 for tid in teacher_lookup}
+
+    assignment: Dict[int, Dict[str, str]] = {}
+
+    # Process grades in a deterministic order for reproducibility.
+    for grade in sorted(grade_subject_info.keys()):
+        assignment[grade] = {}
+        subjects = grade_subject_info[grade]
+
+        # Sort subjects so that the most constrained (fewest candidates) are
+        # assigned first — giving them first pick of teachers.
+        subjects_sorted = sorted(
+            subjects,
+            key=lambda s: (len(s["candidates"]), -s["ppw"]),
+        )
+
+        for subj in subjects_sorted:
+            sid = subj["id"]
+            candidates = subj["candidates"]
+
+            if sid == _FREE_PERIOD_SUBJECT_ID:
+                # Free periods don't need a real teacher.
+                assignment[grade][sid] = _FREE_PERIOD_TEACHER_ID
+                continue
+
+            if not candidates:
+                # No qualified teacher — will be marked UNASSIGNED later.
+                assignment[grade][sid] = ""
+                continue
+
+            # Pick the candidate with the lowest committed load.
+            best = min(candidates, key=lambda tid: committed_load.get(tid, 0))
+            assignment[grade][sid] = best
+            committed_load[best] = committed_load.get(best, 0) + subj["ppw"]
+
+    return assignment
+
+
 # ── Deterministic solver with randomised restarts ────────────────────────────
 
 def _build_deterministic_timetable(
@@ -226,6 +279,22 @@ def _build_deterministic_timetable(
             })
 
         grade_subject_info[grade] = info_list
+
+    # ── Lock one teacher per (grade, subject) ────────────────────────────────
+    locked_teachers = _preassign_teachers(grade_subject_info, teacher_lookup)
+
+    # Replace each subject's candidate list with ONLY its locked teacher so
+    # the backtracking solver can never pick a different teacher for the same
+    # (grade, subject) pair.
+    for grade, info_list in grade_subject_info.items():
+        for info in info_list:
+            sid = info["id"]
+            locked_tid = locked_teachers.get(grade, {}).get(sid, "")
+            if locked_tid:
+                info["candidates"] = [locked_tid]
+            else:
+                # No teacher — solver will handle via UNASSIGNED path.
+                info["candidates"] = []
 
     # Diversify subject ordering per grade to reduce identical-looking timetables
     # across grades. Shuffle each grade's subject info so assignment order varies.
@@ -584,7 +653,8 @@ Rules
 5. Do NOT create teacher clashes.
 6. Respect assignedTeacher for each subject when possible.
 7. If more than one teacher can teach the same subject, distribute workload evenly.
-8. Return ONLY valid JSON.
+8. For each Grade+Subject combination, use exactly ONE teacher across all periods and days. A teacher may teach the same subject to multiple grades, but each grade must have a single consistent teacher per subject.
+9. Return ONLY valid JSON.
 
 Teachers
 
